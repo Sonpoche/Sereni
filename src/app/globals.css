@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 180 43% 42%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 9 66% 62%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 92 24% 45%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 180 43% 42%;
+    --radius: 0.75rem;
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-[hsl(var(--border))];
+  }
+
+  body {
+    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased font-sans;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1 {
+    @apply font-title text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    @apply font-title text-3xl font-semibold tracking-tight md:text-4xl;
+    letter-spacing: -0.01em;
+  }
+
+  h3 {
+    @apply font-title text-2xl font-semibold tracking-tight md:text-3xl;
+  }
+
+  h4 {
+    @apply font-title text-xl font-semibold tracking-tight md:text-2xl;
+  }
+
+  p, li, input, textarea {
+    @apply text-base font-medium leading-relaxed md:text-lg font-sans;
+  }
+
+  input, textarea, select {
+    @apply font-medium;
+  }
+
+  button, .button {
+    @apply font-semibold;
+  }
+}
+
+@layer components {
+  .conseil-box {
+    @apply rounded-xl border-2 border-lavender/20 bg-lavender-light p-6;
+  }
+
+  .conseil-header {
+    @apply flex gap-3;
+  }
+
+  .conseil-icon-container {
+    @apply p-2 rounded-lg bg-lavender/10;
+  }
+
+  .conseil-icon {
+    @apply h-5 w-5 text-lavender;
+  }
+
+  .conseil-title {
+    @apply font-medium text-lavender-dark mb-1;
+  }
+
+  .conseil-content {
+    @apply text-sm text-lavender-dark/90;
+  }
+}
