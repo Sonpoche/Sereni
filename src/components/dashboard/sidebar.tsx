@@ -12,7 +12,6 @@ import {
   FileText,
   Settings,
   CreditCard,
-  BarChart,
   Clock,
   X,
   Star,
@@ -104,11 +103,11 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-full w-64 bg-white border-r transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static",
+        "fixed top-0 left-0 z-40 h-full w-64 bg-white border-r shadow-md transform transition-transform duration-300 ease-in-out",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* En-tête mobile */}
-        <div className="h-16 flex items-center justify-between px-4 border-b lg:hidden">
+        <div className="h-16 flex items-center justify-between px-4 border-b">
           <span className="font-title text-xl font-bold text-primary">
             SereniBook
           </span>
@@ -116,13 +115,14 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
             variant="ghost"
             size="icon"
             onClick={onClose}
+            className="lg:hidden"
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
         {/* Navigation */}
-        <div className="p-4">
+        <div className="p-4 pt-6 overflow-y-auto h-[calc(100vh-4rem)]">
           <nav className="space-y-1">
             {menuItems.map((item) => {
               // Vérifier si l'élément doit être affiché pour ce rôle

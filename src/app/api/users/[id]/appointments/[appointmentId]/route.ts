@@ -149,137 +149,134 @@ export async function PATCH(
     if (validatedData.date || validatedData.startTime) {
       // Récupérer le service pour la durée si nécessaire ou utilisé le service existant
       let serviceDuration = existingAppointment.serviceId === validatedData.serviceId 
-      ? null // On garde le même service
-      : await prisma.service.findUnique({
-          where: { id: validatedData.serviceId || existingAppointment.serviceId },
-          select: { duration: true }
-        });
-    
-    // Extraire la date et l'heure du rendez-vous existant
-    const existingStartTime = existingAppointment.startTime;
-    const existingDate = existingStartTime.toISOString().split('T')[0];
-    const existingTime = existingStartTime.toISOString().split('T')[1].substring(0, 5);
-    
-    // Utiliser les nouvelles valeurs ou conserver les anciennes
-    const dateStr = validatedData.date || existingDate;
-    const startTimeStr = validatedData.startTime || existingTime;
-    
-    // Créer la nouvelle date de début
-    const startTime = new Date(`${dateStr}T${startTimeStr}:00`);
-    updateData.startTime = startTime;
-    
-    // Calculer la nouvelle heure de fin
-    const endTime = new Date(startTime);
-    const duration = serviceDuration?.duration || 
-                    (existingAppointment.endTime.getTime() - existingAppointment.startTime.getTime()) / 60000;
-    
-    endTime.setMinutes(endTime.getMinutes() + duration);
-    
-    // Ajouter le temps tampon si configuré
-    if (professional.bufferTime) {
-      endTime.setMinutes(endTime.getMinutes() + professional.bufferTime);
+        ? null // On garde le même service
+        : await prisma.service.findUnique({
+            where: { id: validatedData.serviceId || existingAppointment.serviceId },
+            select: { duration: true }
+          })
+      
+      // Extraire la date et l'heure du rendez-vous existant
+      const existingStartTime = existingAppointment.startTime
+      const existingDate = existingStartTime.toISOString().split('T')[0]
+      const existingTime = existingStartTime.toISOString().split('T')[1].substring(0, 5)
+      
+      // Utiliser les nouvelles valeurs ou conserver les anciennes
+      const dateStr = validatedData.date || existingDate
+      const startTimeStr = validatedData.startTime || existingTime
+      
+      // Créer la nouvelle date de début
+      const startTime = new Date(`${dateStr}T${startTimeStr}:00`)
+      updateData.startTime = startTime
+      
+      // Calculer la nouvelle heure de fin
+      const endTime = new Date(startTime)
+      const duration = serviceDuration?.duration || 
+                      (existingAppointment.endTime.getTime() - existingAppointment.startTime.getTime()) / 60000
+      
+      endTime.setMinutes(endTime.getMinutes() + duration)
+      
+      // Ajouter le temps tampon si configuré
+      if (professional.bufferTime) {
+        endTime.setMinutes(endTime.getMinutes() + professional.bufferTime)
+      }
+      
+      updateData.endTime = endTime
     }
     
-    updateData.endTime = endTime;
-  }
-  
-  // Mettre à jour le rendez-vous
-  const updatedAppointment = await prisma.booking.update({
-    where: { id: appointmentId },
-    data: updateData,
-    include: {
-        client: {
-            select: {
-              id: true,
-              phone: true,
-              user: {
-                select: {
-                  name: true,
-                  email: true,
+    // Mettre à jour le rendez-vous
+    const updatedAppointment = await prisma.booking.update({
+      where: { id: appointmentId },
+      data: updateData,
+      include: {
+          client: {
+              select: {
+                id: true,
+                phone: true,
+                user: {
+                  select: {
+                    name: true,
+                    email: true,
+                  }
                 }
               }
-            }
-          },
-      service: true,
-    },
-  });
-  
-  return NextResponse.json(updatedAppointment);
-} catch (error) {
-  console.error("Erreur dans PATCH /api/users/[id]/appointments/[appointmentId]:", error);
-  
-  if (error instanceof z.ZodError) {
+            },
+        service: true,
+      },
+    })
+    
+    return NextResponse.json(updatedAppointment)
+  } catch (error) {
+    console.error("Erreur dans PATCH /api/users/[id]/appointments/[appointmentId]:", error)
+    
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Données invalides", details: error.errors },
+        { status: 400 }
+      )
+    }
+    
     return NextResponse.json(
-      { error: "Données invalides", details: error.errors },
-      { status: 400 }
-    );
+      { error: "Erreur interne du serveur" },
+      { status: 500 }
+    )
   }
-  
-  return NextResponse.json(
-    { error: "Erreur interne du serveur" },
-    { status: 500 }
-  );
-}
 }
 
 export async function DELETE(
-request: Request,
-{ params }: { params: { id: string, appointmentId: string } }
+  request: Request,
+  { params }: { params: { id: string, appointmentId: string } }
 ) {
-try {
-  const { id: userId, appointmentId } = params;
-  
-  // Vérifier l'authentification
-  const session = await auth();
-  if (!session?.user?.id || (session.user.id !== userId)) {
-    return NextResponse.json(
-      { error: "Non autorisé" },
-      { status: 401 }
-    );
-  }
-  
-  // Récupérer le profil professionnel
-  const professional = await prisma.professional.findUnique({
-    where: { userId },
-  });
-  
-  if (!professional) {
-    return NextResponse.json(
-      { error: "Profil professionnel non trouvé" },
-      { status: 404 }
-    );
-  }
-  
-  // Vérifier que le rendez-vous existe et appartient au professionnel
-  const appointment = await prisma.booking.findUnique({
-    where: { 
-      id: appointmentId,
-      professionalId: professional.id
+  try {
+    const { id: userId, appointmentId } = params
+    
+    // Vérifier l'authentification
+    const session = await auth()
+    if (!session?.user?.id || (session.user.id !== userId)) {
+      return NextResponse.json(
+        { error: "Non autorisé" },
+        { status: 401 }
+      )
     }
-  });
-  
-  if (!appointment) {
-    return NextResponse.json(
-      { error: "Rendez-vous non trouvé ou non autorisé" },
-      { status: 404 }
-    );
-  }
-  
-  // Au lieu de supprimer, on peut marquer comme annulé pour garder l'historique
-  await prisma.booking.update({
-    where: { id: appointmentId },
-    data: { 
-      status: "CANCELLED",
-      cancellationReason: "Supprimé par le professionnel"
+    
+    // Récupérer le profil professionnel
+    const professional = await prisma.professional.findUnique({
+      where: { userId },
+    })
+    
+    if (!professional) {
+      return NextResponse.json(
+        { error: "Profil professionnel non trouvé" },
+        { status: 404 }
+      )
     }
-  });
-  
-  return NextResponse.json({ success: true });
-} catch (error) {
-  console.error("Erreur dans DELETE /api/users/[id]/appointments/[appointmentId]:", error);
-  return NextResponse.json(
-    { error: "Erreur interne du serveur" },
-    { status: 500 }
-  );
-}
+    
+    // Vérifier que le rendez-vous existe et appartient au professionnel
+    const appointment = await prisma.booking.findUnique({
+      where: { 
+        id: appointmentId,
+        professionalId: professional.id
+      }
+    })
+    
+    if (!appointment) {
+      return NextResponse.json(
+        { error: "Rendez-vous non trouvé ou non autorisé" },
+        { status: 404 }
+      )
+    }
+    
+    // TOUJOURS supprimer complètement le rendez-vous ou la plage bloquée
+    // au lieu de le marquer comme annulé
+    await prisma.booking.delete({
+      where: { id: appointmentId }
+    })
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Erreur dans DELETE /api/users/[id]/appointments/[appointmentId]:", error)
+    return NextResponse.json(
+      { error: "Erreur interne du serveur" },
+      { status: 500 }
+    )
+  }
 }

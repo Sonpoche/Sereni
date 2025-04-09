@@ -61,16 +61,16 @@ export default function AppointmentCalendar({
 
   // Déterminer les jours fermés
   const getClosedDays = () => {
-    const closedDays = [];
+    const closedDays = []
     
     // Parcourir tous les jours (0-6)
     for (let i = 0; i < 7; i++) {
       if (!availability.some(slot => slot.dayOfWeek === i)) {
-        closedDays.push(i);
+        closedDays.push(i)
       }
     }
     
-    return closedDays;
+    return closedDays
   }
 
   // Initialisation du calendrier
@@ -79,19 +79,22 @@ export default function AppointmentCalendar({
       const calendarEl = calendarRef.current
       
       // Liste des jours fermés
-      const closedDays = getClosedDays();
+      const closedDays = getClosedDays()
       
       // Supprimer toute balise style existante
-      const oldStyle = document.getElementById('calendar-custom-style');
+      const oldStyle = document.getElementById('calendar-custom-style')
       if (oldStyle) {
-        oldStyle.remove();
+        oldStyle.remove()
       }
       
       // Ajouter du CSS personnalisé
-      const style = document.createElement('style');
-      style.id = 'calendar-custom-style';
+      const style = document.createElement('style')
+      style.id = 'calendar-custom-style'
       style.innerHTML = `
-        /* Style personnalisé pour le calendrier */
+        /* Style personnalisé pour le calendrier - basé sur le modèle fourni */
+        .fc-theme-standard {
+          font-family: 'Quicksand', sans-serif;
+        }
         .fc-theme-standard .fc-view {
           background-color: white;
           border-radius: 0.5rem;
@@ -99,11 +102,11 @@ export default function AppointmentCalendar({
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
         .fc .fc-timegrid-slot {
-          height: 60px !important; /* Augmenté pour des cases plus grandes */
+          height: 40px !important; /* Créneaux moins hauts pour éviter le défilement */
           border-bottom: 1px solid #f1f5f9;
         }
         .fc .fc-timegrid-body {
-          min-height: 900px !important; /* Calendrier plus grand */
+          min-height: auto !important; /* Ajustement automatique */
         }
         .fc .fc-col-header-cell {
           background-color: #F6F8F9;
@@ -114,42 +117,102 @@ export default function AppointmentCalendar({
           color: #334155;
           padding: 6px;
           text-decoration: none !important;
+          text-transform: lowercase;
+          font-size: 0.9rem;
+        }
+        .fc .fc-col-header-cell-cushion::first-letter {
+          text-transform: uppercase;
         }
         .fc .fc-timegrid-slot-label-cushion {
           font-weight: 500;
           color: #64748b;
-          align-self: flex-start;
-          margin-top: 4px;
-        }
-        .fc .fc-timegrid-slot-minor {
-          border-top: 1px dashed #e2e8f0 !important;
+          margin-top: 0;
         }
         .fc .fc-timegrid-now-indicator-line {
           border-color: #67B3AB;
           border-width: 2px;
         }
-        .fc .fc-timegrid-now-indicator-arrow {
-          border-color: #67B3AB;
-          border-width: 5px;
+        .fc .fc-day-today {
+          background-color: #e9f6f5 !important;
         }
         .fc .fc-event {
           border-radius: 4px;
           border: none;
-          padding: 2px 4px;
+          padding: 4px 6px; /* Plus de padding pour meilleure lisibilité */
           font-size: 0.875rem;
+          margin: 2px; /* Légèrement plus de marge */
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Ombre légère pour relief */
         }
         .fc .fc-event-title {
-          font-weight: 500;
+          font-weight: 600; /* Plus gras pour meilleure lisibilité */
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          color: rgba(0, 0, 0, 0.85); /* Texte plus foncé pour contraste */
         }
         .fc .fc-event-time {
-          font-weight: 400;
-          font-size: 0.75rem;
-        }
-        .fc .fc-day-today {
-          background-color: #e9f6f5 !important;
+          font-weight: 500;
+          font-size: 0.8rem;
         }
         
-        /* Styles pour les jours fermés - Vue mois */
+        /* Style pour les colonnes fermées - Vue jour/semaine */
+        .fc-timegrid-col.fc-day-closed {
+          background-color: #FEE2E2 !important;
+          position: relative;
+        }
+        .fc-col-header-cell.fc-day-closed {
+          background-color: #FEE2E2 !important;
+        }
+        .fc-timegrid-col.fc-day-closed::before {
+          content: "FERMÉ";
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-90deg);
+          color: #991B1B;
+          font-weight: bold;
+          font-size: 14px;
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 10;
+          background-color: rgba(254, 226, 226, 0.8);
+          padding: 2px 10px;
+          border-radius: 4px;
+        }
+        
+        /* Styles spécifiques par statut de rendez-vous - Améliorés pour meilleure visibilité */
+        .fc .fc-event.status-PENDING {
+          background-color: #e9d5ff;
+          border-left: 4px solid #9333ea;
+          color: #5b21b6; /* Texte plus foncé */
+        }
+        .fc .fc-event.status-CONFIRMED {
+          background-color: #d1fae5;
+          border-left: 4px solid #10b981;
+          color: #047857; /* Texte plus foncé */
+        }
+        .fc .fc-event.status-CANCELLED {
+          background-color: #fee2e2;
+          border-left: 4px solid #ef4444;
+          color: #b91c1c; /* Texte plus foncé */
+          opacity: 0.7;
+        }
+        .fc .fc-event.status-COMPLETED {
+          background-color: #dbeafe;
+          border-left: 4px solid #3b82f6;
+          color: #1d4ed8; /* Texte plus foncé */
+        }
+        
+        /* Style spécifique pour les absences système */
+        .fc .fc-event.status-CANCELLED[data-system="true"] {
+          background-color: #fef3c7; /* Fond jaune pâle pour les absences */
+          border-left: 4px solid #f59e0b;
+          color: #92400e;
+          font-weight: bold;
+          opacity: 0.9;
+        }
+        
+        /* Style pour la vue mois */
         .fc-daygrid-day.fc-day-closed {
           background-color: #FEE2E2 !important;
         }
@@ -169,32 +232,6 @@ export default function AppointmentCalendar({
           z-index: 1;
           background-color: #FEE2E2;
           padding: 2px 8px;
-          border-radius: 4px;
-          width: auto;
-        }
-        
-        /* Styles pour les colonnes fermées - Vue semaine/jour */
-        .fc-timegrid-col.fc-day-closed {
-          background-color: #FEE2E2 !important;
-          position: relative;
-        }
-        .fc-col-header-cell.fc-day-closed {
-          background-color: #FEE2E2 !important;
-        }
-        .fc-timegrid-col.fc-day-closed::before {
-          content: "FERMÉ";
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%) rotate(-90deg);
-          color: #991B1B;
-          font-weight: bold;
-          font-size: 16px;
-          white-space: nowrap;
-          pointer-events: none;
-          z-index: 10;
-          background-color: rgba(254, 226, 226, 0.8);
-          padding: 2px 10px;
           border-radius: 4px;
           width: auto;
         }
@@ -228,13 +265,13 @@ export default function AppointmentCalendar({
           vertical-align: top !important;
         }
         .fc-timegrid-slot-label-frame {
-          height: 60px !important; /* Ajusté pour correspondre à la hauteur des slots */
+          height: 40px !important; /* Ajusté pour correspondre à la hauteur des slots */
           display: flex !important;
           align-items: flex-start !important;
           justify-content: flex-start !important;
         }
-      `;
-      document.head.appendChild(style);
+      `
+      document.head.appendChild(style)
       
       const calendar = new Calendar(calendarEl, {
         plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
@@ -249,7 +286,7 @@ export default function AppointmentCalendar({
         slotLabelInterval: '01:00:00',
         snapDuration: '00:15:00',
         height: 'auto',
-        contentHeight: view === 'week' ? 900 : 'auto', // Augmenté pour un calendrier plus grand
+        contentHeight: view === 'week' ? 700 : 'auto', // Plus petit pour moins de défilement
         businessHours: getBusinessHours(),
         nowIndicator: true,
         dayMaxEvents: true,
@@ -267,140 +304,158 @@ export default function AppointmentCalendar({
           minute: '2-digit',
           hour12: false
         },
-        eventBackgroundColor: '#67B3AB',
-        eventBorderColor: '#519A94',
-        eventTextColor: '#ffffff',
-        events: appointments.map(appointment => ({
-          id: appointment.id,
-          title: appointment.service?.name || 'Rendez-vous',
-          start: appointment.startTime,
-          end: appointment.endTime,
-          backgroundColor: appointment.service?.color || '#67B3AB',
-          borderColor: appointment.service?.color || '#67B3AB',
-          extendedProps: {
-            clientName: appointment.client?.user?.name || appointment.client?.name || 'Client',
-            clientEmail: appointment.client?.user?.email || appointment.client?.email || '',
-            clientPhone: appointment.client?.phone || '',
-            serviceName: appointment.service?.name || '',
-            servicePrice: appointment.service?.price || 0,
-            status: appointment.status,
+        events: appointments.map(appointment => {
+          // Déterminer si c'est une absence système
+          const isSystemAbsence = appointment.status === "CANCELLED" && 
+                                 appointment.clientId === "00000000-0000-0000-0000-000000000000"
+          
+          return {
+            id: appointment.id,
+            title: isSystemAbsence ? "Absence" : appointment.client?.user?.name || 'Client',
+            start: appointment.startTime,
+            end: appointment.endTime,
+            className: `status-${appointment.status}`,
+            // Ajouter un attribut data pour les absences système
+            extendedProps: {
+              clientName: appointment.client?.user?.name || '',
+              clientEmail: appointment.client?.user?.email || '',
+              clientPhone: appointment.client?.phone || '',
+              serviceName: appointment.service?.name || '',
+              servicePrice: appointment.service?.price || 0,
+              status: appointment.status,
+              isSystemAbsence: isSystemAbsence
+            }
           }
-        })),
-        // Personnaliser l'affichage des événements
+        }),
+        eventContent: function(arg) {
+          const timeText = arg.timeText
+          const title = arg.event.title
+          const isSystemAbsence = arg.event.extendedProps.isSystemAbsence
+          const serviceName = isSystemAbsence ? "Absence" : arg.event.extendedProps.serviceName
+          
+          return { html: `
+            <div class="fc-event-time font-semibold">${timeText}</div>
+            <div class="fc-event-title font-medium">${title}</div>
+            <div class="fc-event-service text-xs font-medium opacity-90">${serviceName}</div>
+          `}
+        },
         eventDidMount: function(info) {
-          if (info.event.extendedProps.status === 'CANCELLED') {
-            info.el.style.textDecoration = 'line-through';
-            info.el.style.opacity = '0.6';
+          if (info.event.extendedProps.isSystemAbsence) {
+            info.el.setAttribute('data-system', 'true')
           }
           
           // Si l'événement a le titre "FERMÉ", le masquer
           if (info.event.title === 'FERMÉ') {
-            info.el.classList.add('fc-event-fermé');
+            info.el.classList.add('fc-event-fermé')
           }
           
           // Supprimer tout point/carré vert ou autre indicateur visuel non désiré
-          const dots = info.el.querySelectorAll('.fc-daygrid-event-dot');
-          dots.forEach(dot => dot.remove());
+          const dots = info.el.querySelectorAll('.fc-daygrid-event-dot')
+          dots.forEach(dot => dot.remove())
         },
         
         // Fonction qui s'exécute après un changement de vue ou de dates
         datesSet: function(info) {
           setTimeout(() => {
-            applyClosedDaysStyle();
-          }, 100);
+            applyClosedDaysStyle()
+          }, 100)
         },
         
         // Empêcher la sélection sur les jours fermés
         selectAllow: function(selectInfo) {
-          const startDay = selectInfo.start.getDay();
-          return !closedDays.includes(startDay);
+          const startDay = selectInfo.start.getDay()
+          return !closedDays.includes(startDay)
         },
         
         eventClick: onEventClick,
         
         select: function(info) {
           // Vérifier si le jour est fermé
-          const dayOfWeek = info.start.getDay();
+          const dayOfWeek = info.start.getDay()
           if (!closedDays.includes(dayOfWeek)) {
-            onDateSelect(info);
+            onDateSelect(info)
           } else {
-            calendar.unselect();
+            calendar.unselect()
           }
         },
-      });
+      })
       
       // Fonction pour appliquer les styles aux jours fermés
       const applyClosedDaysStyle = () => {
         // Nettoyer les classes existantes
         document.querySelectorAll('.fc-day-closed').forEach(el => {
-          el.classList.remove('fc-day-closed');
-        });
+          el.classList.remove('fc-day-closed')
+        })
         
         // Vue mois
         if (calendar.view.type === 'dayGridMonth') {
           document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
-            const dateAttr = dayEl.getAttribute('data-date');
+            const dateAttr = dayEl.getAttribute('data-date')
             if (dateAttr) {
-              const date = new Date(dateAttr);
-              const dayOfWeek = date.getDay();
+              const date = new Date(dateAttr)
+              const dayOfWeek = date.getDay()
               if (closedDays.includes(dayOfWeek)) {
-                dayEl.classList.add('fc-day-closed');
+                dayEl.classList.add('fc-day-closed')
               }
             }
-          });
+          })
         } 
         // Vue semaine ou jour
         else if (calendar.view.type.includes('timeGrid')) {
           // Pour chaque colonne de jour
           document.querySelectorAll('.fc-col-header-cell').forEach((headerEl) => {
-            const dateAttr = headerEl.getAttribute('data-date');
+            const dateAttr = headerEl.getAttribute('data-date')
             if (dateAttr) {
-              const date = new Date(dateAttr);
-              const dayOfWeek = date.getDay();
+              const date = new Date(dateAttr)
+              const dayOfWeek = date.getDay()
               
               if (closedDays.includes(dayOfWeek)) {
                 // Marquer l'en-tête du jour
-                headerEl.classList.add('fc-day-closed');
+                headerEl.classList.add('fc-day-closed')
                 
                 // Trouver et marquer la colonne correspondante
-                const headerIndex = Array.from(headerEl.parentElement.children).indexOf(headerEl);
-                const columns = document.querySelectorAll('.fc-timegrid-col');
-                if (columns[headerIndex]) {
-                  columns[headerIndex].classList.add('fc-day-closed');
+                if (headerEl.parentElement) {
+                  const headerIndex = Array.from(headerEl.parentElement.children).indexOf(headerEl)
+                  if (headerIndex !== -1) {
+                    const columns = document.querySelectorAll('.fc-timegrid-col')
+                    if (columns[headerIndex]) {
+                      columns[headerIndex].classList.add('fc-day-closed')
+                    }
+                  }
                 }
               }
             }
-          });
+          })
           
           // S'assurer que les tranches de 15 minutes sont bien visibles
           document.querySelectorAll('.fc-timegrid-slot-minor').forEach(slot => {
-            (slot as HTMLElement).style.borderTop = '1px dashed #e2e8f0';
-          });
+            (slot as HTMLElement).style.borderTop = '1px dashed #e2e8f0'
+          })
         }
         
         // Supprimer les petits carrés verts indésirables
         document.querySelectorAll('.fc-daygrid-event-dot').forEach(dot => {
-          dot.remove();
-        });
-      };
+          dot.remove()
+        })
+      }
       
-      calendar.render();
-      calendarInstanceRef.current = calendar;
+      calendar.render()
+      calendarInstanceRef.current = calendar
       
       // Appliquer les styles après le rendu initial
       setTimeout(() => {
-        applyClosedDaysStyle();
-      }, 200);
+        applyClosedDaysStyle()
+      }, 200)
       
       return () => {
-        calendar.destroy();
-        calendarInstanceRef.current = null;
+        calendar.destroy()
+        calendarInstanceRef.current = null
         if (style.parentNode) {
-          style.parentNode.removeChild(style);
+          style.parentNode.removeChild(style)
         }
-      };
+      }
     }
-  }, [appointments, view, onEventClick, onDateSelect, availability]);
+  }, [appointments, view, onEventClick, onDateSelect, availability])
 
   // Mettre à jour la vue lorsque la prop view change
   useEffect(() => {
@@ -409,10 +464,10 @@ export default function AppointmentCalendar({
         month: 'dayGridMonth',
         week: 'timeGridWeek',
         day: 'timeGridDay'
-      };
-      calendarInstanceRef.current.changeView(viewMap[view]);
+      }
+      calendarInstanceRef.current.changeView(viewMap[view])
     }
-  }, [view]);
+  }, [view])
 
   return (
     <div className="space-y-4">
@@ -425,14 +480,14 @@ export default function AppointmentCalendar({
             <Button 
               variant="outline"
               className="text-xs"
-              onClick={() => router.push('/mon-profil')}
+              onClick={() => router.push('/profil')}
             >
               Aller au profil
             </Button>
           </AlertDescription>
         </Alert>
       )}
-      <div ref={calendarRef} className="min-h-[900px]" /> {/* Hauteur minimale augmentée */}
+      <div ref={calendarRef} className="min-h-[600px]" />
     </div>
-  );
+  )
 }

@@ -66,7 +66,15 @@ export default function AppointmentDetails({
     minute: '2-digit'
   })
   
+  // Détecter si c'est une absence/plage bloquée
+  const isBlockedTime = appointment.status === "CANCELLED" && 
+                      appointment.clientId === "00000000-0000-0000-0000-000000000000";
+  
   const getStatusBadge = (status: string) => {
+    if (isBlockedTime) {
+      return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Absence</Badge>
+    }
+    
     switch (status) {
       case "PENDING":
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">En attente</Badge>
@@ -114,10 +122,10 @@ export default function AppointmentDetails({
     try {
       await onDelete()
       setIsDeleteDialogOpen(false)
-      toast.success("Rendez-vous supprimé avec succès")
+      toast.success(isBlockedTime ? "Plage bloquée supprimée avec succès" : "Rendez-vous supprimé avec succès")
     } catch (error) {
-      console.error("Erreur lors de la suppression du rendez-vous:", error)
-      toast.error("Erreur lors de la suppression du rendez-vous")
+      console.error("Erreur lors de la suppression:", error)
+      toast.error(isBlockedTime ? "Erreur lors de la suppression de la plage" : "Erreur lors de la suppression du rendez-vous")
     } finally {
       setIsLoading(false)
     }
@@ -134,30 +142,46 @@ export default function AppointmentDetails({
       <Card>
         <CardHeader className="pb-2">
           <div className="flex justify-between items-start">
-            <CardTitle>{appointment.service.name}</CardTitle>
+            <CardTitle>{isBlockedTime ? "Absence" : appointment.service.name}</CardTitle>
             {getStatusBadge(appointment.status)}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Informations client */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <User className="h-4 w-4 text-primary" />
-              <span className="font-medium">{appointment.client.user.name}</span>
+          {/* Informations du rendez-vous ou de l'absence */}
+          {isBlockedTime ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <User className="h-4 w-4 text-primary" />
+                <span className="font-medium">Système</span>
+              </div>
+              {appointment.notes && (
+                <div className="flex items-center gap-2 text-sm">
+                  <FileText className="h-4 w-4 text-gray-500" />
+                  <span>{appointment.notes}</span>
+                </div>
+              )}
             </div>
-            {appointment.client.phone && (
+          ) : (
+            // Informations client pour les rendez-vous normaux
+            <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
-                <Phone className="h-4 w-4 text-gray-500" />
-                <span>{appointment.client.phone}</span>
+                <User className="h-4 w-4 text-primary" />
+                <span className="font-medium">{appointment.client.user.name}</span>
               </div>
-            )}
-            {appointment.client.user.email && (
-              <div className="flex items-center gap-2 text-sm">
-                <Mail className="h-4 w-4 text-gray-500" />
-                <span>{appointment.client.user.email}</span>
-              </div>
-            )}
-          </div>
+              {appointment.client.phone && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Phone className="h-4 w-4 text-gray-500" />
+                  <span>{appointment.client.phone}</span>
+                </div>
+              )}
+              {appointment.client.user.email && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="h-4 w-4 text-gray-500" />
+                  <span>{appointment.client.user.email}</span>
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Informations rendez-vous */}
           <div className="border-t border-b py-4 space-y-2">
@@ -169,14 +193,16 @@ export default function AppointmentDetails({
               <Clock className="h-4 w-4 text-gray-500" />
               <span>{startTime} - {endTime}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Tag className="h-4 w-4 text-gray-500" />
-              <span>{appointment.service.price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span>
-            </div>
+            {!isBlockedTime && (
+              <div className="flex items-center gap-2 text-sm">
+                <Tag className="h-4 w-4 text-gray-500" />
+                <span>{appointment.service.price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span>
+              </div>
+            )}
           </div>
           
           {/* Notes */}
-          {appointment.notes && (
+          {appointment.notes && !isBlockedTime && (
             <div className="space-y-1">
               <h4 className="text-sm font-medium flex items-center gap-2">
                 <FileText className="h-4 w-4 text-gray-500" />
@@ -187,46 +213,64 @@ export default function AppointmentDetails({
           )}
         </CardContent>
         <CardFooter className="flex flex-wrap justify-between gap-2 pt-2">
-          {/* Actions contextuelles selon le statut */}
-          {(isPending || isConfirmed) && (
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Edit className="h-4 w-4 mr-1" />
-              Modifier
-            </Button>
-          )}
-          
-          {isPending && (
-            <Button size="sm" onClick={handleCompleteAppointment} disabled={isLoading}>
-              <CheckCircle className="h-4 w-4 mr-1" />
-              Confirmer
-            </Button>
-          )}
-          
-          {isConfirmed && (
-            <Button size="sm" variant="default" onClick={handleCompleteAppointment} disabled={isLoading}>
-              <CheckCircle className="h-4 w-4 mr-1" />
-              Terminer
-            </Button>
-          )}
-          
-          {(isPending || isConfirmed) && (
-            <Button variant="outline" size="sm" onClick={handleCancelAppointment} disabled={isLoading}>
-              <XCircle className="h-4 w-4 mr-1" />
-              Annuler
-            </Button>
-          )}
-          
-          {!isCompleted && !isCancelled && (
+          {/* Actions pour les plages bloquées */}
+          {isBlockedTime && (
             <Button 
-              variant="outline" 
+              variant="destructive" 
               size="sm" 
-              className="text-red-600 hover:bg-red-50 hover:text-red-700"
               onClick={() => setIsDeleteDialogOpen(true)}
               disabled={isLoading}
+              className="w-full"
             >
               <Trash className="h-4 w-4 mr-1" />
-              Supprimer
+              Supprimer la plage bloquée
             </Button>
+          )}
+          
+          {/* Actions pour les rendez-vous normaux */}
+          {!isBlockedTime && (
+            <>
+              {(isPending || isConfirmed) && (
+                <Button variant="outline" size="sm" onClick={onEdit}>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Modifier
+                </Button>
+              )}
+              
+              {isPending && (
+                <Button size="sm" onClick={handleCompleteAppointment} disabled={isLoading}>
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Confirmer
+                </Button>
+              )}
+              
+              {isConfirmed && (
+                <Button size="sm" variant="default" onClick={handleCompleteAppointment} disabled={isLoading}>
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Terminer
+                </Button>
+              )}
+              
+              {(isPending || isConfirmed) && (
+                <Button variant="outline" size="sm" onClick={handleCancelAppointment} disabled={isLoading}>
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Annuler
+                </Button>
+              )}
+              
+              {!isCompleted && !isCancelled && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  disabled={isLoading}
+                >
+                  <Trash className="h-4 w-4 mr-1" />
+                  Supprimer
+                </Button>
+              )}
+            </>
           )}
         </CardFooter>
       </Card>
@@ -240,7 +284,9 @@ export default function AppointmentDetails({
           <AlertDialogHeader>
             <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
             <AlertDialogDescription>
-              Cette action est irréversible. Le rendez-vous sera définitivement supprimé de votre agenda.
+              {isBlockedTime 
+                ? "Cette action est irréversible. La plage bloquée sera définitivement supprimée de votre agenda."
+                : "Cette action est irréversible. Le rendez-vous sera définitivement supprimé de votre agenda."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

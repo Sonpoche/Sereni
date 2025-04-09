@@ -144,9 +144,25 @@ model Professional {
   invoices        Invoice[] @relation("ProfessionalToInvoice")
   invoiceSettings InvoiceSettings? @relation("ProfessionalToInvoiceSettings")
   notifications   NotificationSettings? @relation("ProfessionalToNotifications")
+  invitations   InvitationToken[]
+  clients         ProfessionalClient[]
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+model InvitationToken {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  email         String
+  professionalId String
+  expires       DateTime
+  used          Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  
+  professional  Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([token])
 }
 
 model Client {
@@ -168,6 +184,7 @@ model Client {
   packages      ClientPackage[] @relation("ClientToPackage")
   reviews       Review[]  @relation("ClientToReview")
   invoices      Invoice[] @relation("ClientToInvoice")
+  professionals   ProfessionalClient[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -358,4 +375,16 @@ model ClientPackage {
 
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+}
+
+model ProfessionalClient {
+  id              String    @id @default(cuid())
+  professionalId  String
+  clientId        String
+  createdAt       DateTime  @default(now())
+  
+  professional    Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  client          Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@unique([professionalId, clientId])
 }

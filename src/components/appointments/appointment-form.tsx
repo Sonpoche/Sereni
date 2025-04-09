@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
+import { Loader2, UserPlus } from "lucide-react"
 import {
   Form,
   FormControl,
@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { NewClientForm } from "@/components/clients/new-client-form"
+import { useSession } from "next-auth/react"
 
 const appointmentSchema = z.object({
   clientId: z.string().min(1, "Client requis"),
@@ -62,6 +64,9 @@ export function AppointmentForm({
   services,
 }: AppointmentFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isNewClientFormOpen, setIsNewClientFormOpen] = useState(false)
+  const [localClients, setLocalClients] = useState(clients)
+  const { data: session } = useSession()
   
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
@@ -73,6 +78,11 @@ export function AppointmentForm({
       notes: "",
     },
   })
+  
+  // Mettre à jour les clients locaux quand les props clients changent
+  useEffect(() => {
+    setLocalClients(clients)
+  }, [clients])
   
   // Reset form when opened/closed or defaultValues change
   useEffect(() => {
@@ -86,6 +96,14 @@ export function AppointmentForm({
       })
     }
   }, [open, defaultValues, form])
+
+  // Gérer l'ajout d'un nouveau client
+  const handleNewClientSuccess = (client: any) => {
+    // Mettre à jour la liste des clients
+    setLocalClients([...localClients, client])
+    // Sélectionner automatiquement le nouveau client
+    form.setValue("clientId", client.id)
+  }
   
   const handleSubmit = async (data: AppointmentFormValues) => {
     setIsSubmitting(true)
@@ -123,23 +141,35 @@ export function AppointmentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
-                  <Select 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner un client" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center space-x-2">
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value}
+                      className="flex-1"
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un client" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {localClients.map((client) => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setIsNewClientFormOpen(true)}
+                      title="Ajouter un nouveau client"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -248,6 +278,14 @@ export function AppointmentForm({
           </form>
         </Form>
       </DialogContent>
+      
+      {/* Formulaire d'ajout de client */}
+      <NewClientForm
+        open={isNewClientFormOpen}
+        onOpenChange={setIsNewClientFormOpen}
+        onSuccess={handleNewClientSuccess}
+        userId={session?.user?.id || ''}
+      />
     </Dialog>
   )
 }
