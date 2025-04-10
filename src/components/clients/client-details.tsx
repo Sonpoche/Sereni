@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/button"
 import { EditClientForm } from "./edit-client-form"
 import { DeleteClientDialog } from "./delete-client-dialog"
 import { AppointmentHistory } from "./appointment-history"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { type Client } from "./clients-container"
 import { 
@@ -242,12 +240,14 @@ export function ClientDetails({
       </Card>
 
       {/* Formulaire d'édition (modal) */}
-      <EditClientForm
-        isOpen={isEditModalOpen}
-        onOpenChange={setIsEditModalOpen}
-        client={client}
-        onClientUpdated={handleUpdateClient}
-      />
+      {client && (
+        <EditClientForm
+          isOpen={isEditModalOpen}
+          onOpenChange={setIsEditModalOpen}
+          client={client}
+          onClientUpdated={handleUpdateClient}
+        />
+      )}
 
       {/* Dialogue de confirmation de suppression */}
       <DeleteClientDialog

@@ -270,6 +270,12 @@ export default function AppointmentCalendar({
           align-items: flex-start !important;
           justify-content: flex-start !important;
         }
+        .appointment-content {
+          padding: 2px 4px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
       `
       document.head.appendChild(style)
       
@@ -328,17 +334,50 @@ export default function AppointmentCalendar({
           }
         }),
         eventContent: function(arg) {
-          const timeText = arg.timeText
-          const title = arg.event.title
-          const isSystemAbsence = arg.event.extendedProps.isSystemAbsence
-          const serviceName = isSystemAbsence ? "Absence" : arg.event.extendedProps.serviceName
+          const clientName = arg.event.title;
+          const status = arg.event.extendedProps.status;
+          const isSystemAbsence = arg.event.extendedProps.isSystemAbsence;
+          
+          // Afficher uniquement l'heure de début
+          const startTime = arg.event.start ? new Date(arg.event.start).toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          }) : '';
+          
+          // Déterminer la couleur du texte en fonction du statut
+          let textColor = 'text-gray-900'; // Texte foncé par défaut
+          
+          // Vous pouvez ajuster ces couleurs en fonction de vos fonds
+          if (status === 'PENDING') {
+            textColor = 'text-purple-900'; // Texte foncé sur fond rose/violet
+          } else if (status === 'CONFIRMED') {
+            textColor = 'text-green-900'; // Texte foncé sur fond vert
+          } else if (status === 'CANCELLED') {
+            textColor = 'text-red-900'; // Texte foncé sur fond rouge 
+          }
+          
+          if (isSystemAbsence) {
+            return { html: `
+              <div class="appointment-content">
+                <div class="flex items-center">
+                  <span class="font-semibold text-amber-900">${startTime}</span>
+                  <span class="ml-2 text-amber-900">Absence</span>
+                </div>
+              </div>
+            `}
+          }
           
           return { html: `
-            <div class="fc-event-time font-semibold">${timeText}</div>
-            <div class="fc-event-title font-medium">${title}</div>
-            <div class="fc-event-service text-xs font-medium opacity-90">${serviceName}</div>
+            <div class="appointment-content">
+              <div class="flex items-center">
+                <span class="font-semibold ${textColor}">${startTime}</span>
+                <span class="ml-2 ${textColor}">${clientName}</span>
+              </div>
+            </div>
           `}
         },
+
         eventDidMount: function(info) {
           if (info.event.extendedProps.isSystemAbsence) {
             info.el.setAttribute('data-system', 'true')

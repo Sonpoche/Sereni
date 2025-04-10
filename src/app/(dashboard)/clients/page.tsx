@@ -3,6 +3,7 @@ import { Metadata } from "next"
 import { getServerSession } from "@/lib/auth/session"
 import ClientsContainer from "@/components/clients/clients-container"
 import { redirect } from "next/navigation"
+import { auth } from "@/lib/auth/auth.config" // Utilisez auth à la place de getServerSession
 
 export const metadata: Metadata = {
   title: "Gestion des clients | SereniBook",
@@ -10,16 +11,17 @@ export const metadata: Metadata = {
 }
 
 export default async function ClientsPage() {
-  const session = await getServerSession()
+  // Utilisez auth() au lieu de getServerSession()
+  const session = await auth()
   
   // Rediriger si l'utilisateur n'est pas connecté
   if (!session) {
-    redirect("/connexion")
+    return redirect("/connexion")
   }
   
   // Vérifier que l'utilisateur est bien un professionnel
-  if (session.role !== "PROFESSIONAL") {
-    redirect("/tableau-de-bord")
+  if (session.user.role !== "PROFESSIONAL") {
+    return redirect("/tableau-de-bord")
   }
 
   return (

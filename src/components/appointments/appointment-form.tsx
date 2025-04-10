@@ -51,7 +51,7 @@ interface AppointmentFormProps {
   onOpenChange: (open: boolean) => void
   onSubmit: (data: AppointmentFormValues) => Promise<void>
   defaultValues?: Partial<AppointmentFormValues>
-  clients: { id: string; name: string }[]
+  clients: { id: string; user: { name: string; email: string } }[]
   services: { id: string; name: string; duration: number }[]
 }
 
@@ -87,6 +87,8 @@ export function AppointmentForm({
   // Reset form when opened/closed or defaultValues change
   useEffect(() => {
     if (open) {
+      console.log("Valeurs par défaut:", defaultValues);
+      
       form.reset(defaultValues || {
         clientId: "",
         serviceId: "",
@@ -94,6 +96,8 @@ export function AppointmentForm({
         startTime: "09:00",
         notes: "",
       })
+      
+      console.log("Valeurs après reset:", form.getValues());
     }
   }, [open, defaultValues, form])
 
@@ -117,6 +121,9 @@ export function AppointmentForm({
       setIsSubmitting(false)
     }
   }
+  
+  // Chercher le nom du client préselectionné
+  const selectedClient = localClients.find(c => c.id === form.getValues().clientId);
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,24 +149,32 @@ export function AppointmentForm({
                 <FormItem>
                   <FormLabel>Client</FormLabel>
                   <div className="flex items-center space-x-2">
-                    <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
-                      className="flex-1"
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner un client" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {localClients.map((client) => (
-                          <SelectItem key={client.id} value={client.id}>
-                            {client.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {defaultValues?.clientId ? (
+                      <div className="flex-1 p-2 border rounded flex items-center h-10">
+                        <span>
+                          {selectedClient?.user?.name || 'Client sélectionné'}
+                        </span>
+                        <input type="hidden" {...field} />
+                      </div>
+                    ) : (
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Sélectionner un client" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {localClients.map((client) => (
+                            <SelectItem key={client.id} value={client.id}>
+                              {client.user.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <Button
                       type="button"
                       variant="outline"
@@ -184,7 +199,7 @@ export function AppointmentForm({
                   <FormLabel>Service</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
-                    defaultValue={field.value}
+                    value={field.value}
                   >
                     <FormControl>
                       <SelectTrigger>

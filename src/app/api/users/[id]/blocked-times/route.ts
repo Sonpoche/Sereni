@@ -47,8 +47,12 @@ export async function GET(
       where: {
         professionalId: professional.id,
         status: "CANCELLED",
-        // Utilisez une condition explicite pour clientId au lieu de null
-        clientId: '00000000-0000-0000-0000-000000000000'
+        // Rechercher les réservations du client système
+        client: {
+          user: {
+            email: "system@serenibook.app"
+          }
+        }
       },
       orderBy: { startTime: 'asc' }
     })
@@ -99,6 +103,66 @@ export async function POST(
     const startDate = new Date(`${validatedData.date}T${validatedData.startTime}:00`)
     const endDate = new Date(`${validatedData.date}T${validatedData.endTime}:00`)
     
+    // Trouver ou créer un service pour les plages bloquées
+    let blockingService = await prisma.service.findFirst({
+      where: { 
+        professionalId: professional.id,
+        name: "Blocage de plage"
+      }
+    })
+    
+    if (!blockingService) {
+      blockingService = await prisma.service.create({
+        data: {
+          name: "Blocage de plage",
+          description: "Plage horaire bloquée",
+          duration: 60, // Durée par défaut
+          price: 0,
+          professionalId: professional.id,
+          active: true
+        }
+      })
+    }
+    
+    // Trouver ou créer un client système
+    let systemClient = await prisma.client.findFirst({
+      where: {
+        user: {
+          email: "system@serenibook.app"
+        }
+      }
+    })
+    
+    if (!systemClient) {
+      // Créer un utilisateur système s'il n'existe pas
+      const systemUser = await prisma.user.findUnique({
+        where: { email: "system@serenibook.app" }
+      }) || await prisma.user.create({
+        data: {
+          name: "Absence",
+          email: "system@serenibook.app",
+          role: "CLIENT",
+          hasProfile: true
+        }
+      })
+      
+      // Créer le client système
+      systemClient = await prisma.client.create({
+        data: {
+          userId: systemUser.id,
+          preferredLanguage: "fr"
+        }
+      })
+      
+      // Associer ce client au professionnel
+      await prisma.professionalClient.create({
+        data: {
+          professionalId: professional.id,
+          clientId: systemClient.id
+        }
+      })
+    }
+    
     // Créer la plage bloquée comme un rendez-vous spécial
     const blockedTime = await prisma.booking.create({
       data: {
@@ -108,15 +172,21 @@ export async function POST(
         paymentStatus: "PENDING",
         notes: validatedData.notes || validatedData.title,
         professionalId: professional.id,
-        // Utiliser l'ID système pour le client et le service
-        serviceId: "00000000-0000-0000-0000-000000000000",
-        clientId: "00000000-0000-0000-0000-000000000000",
+        serviceId: blockingService.id,
+        clientId: systemClient.id
       }
     })
     
     return NextResponse.json(blockedTime)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Erreur dans POST /api/users/[id]/blocked-times:", error)
+    
+    // Gérer error comme un objet inconnu
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : "Erreur inconnue";
+    
+    console.error("Message d'erreur:", errorMessage)
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -126,7 +196,7 @@ export async function POST(
     }
     
     return NextResponse.json(
-      { error: "Erreur interne du serveur" },
+      { error: "Erreur interne du serveur", details: errorMessage },
       { status: 500 }
     )
   }

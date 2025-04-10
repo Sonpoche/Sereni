@@ -99,10 +99,18 @@ export async function GET(
       if (booking.client && booking.client.user) {
         clientsMap.set(booking.client.id, {
           id: booking.client.id,
-          name: booking.client.user.name,
-          email: booking.client.user.email,
+          user: {
+            name: booking.client.user.name,
+            email: booking.client.user.email
+          },
           phone: booking.client.phone,
-          userId: booking.client.user.id
+          address: booking.client.address,
+          city: booking.client.city,
+          postalCode: booking.client.postalCode,
+          notes: booking.client.notes,
+          createdAt: booking.client.createdAt.toISOString(),
+          appointmentsCount: 1, // On pourrait calculer cela plus précisément
+          lastAppointment: booking.startTime.toISOString()
         })
       }
     })
@@ -110,13 +118,24 @@ export async function GET(
     // Ajouter les clients liés directement
     linkedClients.forEach(link => {
       if (link.client && link.client.user) {
-        clientsMap.set(link.client.id, {
-          id: link.client.id,
-          name: link.client.user.name,
-          email: link.client.user.email,
-          phone: link.client.phone,
-          userId: link.client.user.id
-        })
+        // Si le client existe déjà, on ne l'écrase pas pour garder les infos de rendez-vous
+        if (!clientsMap.has(link.client.id)) {
+          clientsMap.set(link.client.id, {
+            id: link.client.id,
+            user: {
+              name: link.client.user.name,
+              email: link.client.user.email
+            },
+            phone: link.client.phone,
+            address: link.client.address,
+            city: link.client.city,
+            postalCode: link.client.postalCode,
+            notes: link.client.notes,
+            createdAt: link.client.createdAt.toISOString(),
+            appointmentsCount: 0,
+            lastAppointment: null
+          })
+        }
       }
     })
     
@@ -310,12 +329,21 @@ export async function POST(
       console.log("Note: Client déjà associé au professionnel ou erreur:", e)
     }
     
+    // Formater la réponse pour qu'elle corresponde à la structure utilisée par le GET
     const clientData = {
       id: client.id,
-      name: client.user.name,
-      email: client.user.email,
+      user: {
+        name: client.user.name,
+        email: client.user.email
+      },
       phone: client.phone,
-      userId: client.user.id
+      address: client.address || undefined,
+      city: client.city || undefined,
+      postalCode: client.postalCode || undefined,
+      notes: client.notes || undefined,
+      createdAt: client.createdAt.toISOString(),
+      appointmentsCount: 0,
+      lastAppointment: null
     }
     
     console.log("Client créé/récupéré avec succès:", clientData)
