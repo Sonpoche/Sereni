@@ -71,21 +71,33 @@ export function BlockTimeForm({
       await onSubmit(data);
       onOpenChange(false);
       toast.success("Plage horaire bloquée avec succès");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur lors du blocage de la plage horaire:", error);
-      toast.error("Erreur lors du blocage de la plage horaire");
+      
+      // Vérifier si l'erreur est un conflit d'horaire
+      if (error.status === 409 || error.message?.includes("Conflit d'horaire")) {
+        toast.error(error.message || "Ce créneau chevauche un rendez-vous existant ou une plage déjà bloquée. Veuillez choisir un autre horaire.", {
+          duration: 5000,
+          action: {
+            label: "OK",
+            onClick: () => {}
+          }
+        });
+      } else {
+        toast.error("Erreur lors du blocage de la plage horaire");
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
-
+ 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Bloquer une plage horaire</DialogTitle>
         </DialogHeader>
-
+ 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             {/* Date */}
@@ -102,7 +114,7 @@ export function BlockTimeForm({
                 </FormItem>
               )}
             />
-
+ 
             {/* Heures */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -118,7 +130,7 @@ export function BlockTimeForm({
                   </FormItem>
                 )}
               />
-
+ 
               <FormField
                 control={form.control}
                 name="endTime"
@@ -133,7 +145,7 @@ export function BlockTimeForm({
                 )}
               />
             </div>
-
+ 
             {/* Titre */}
             <FormField
               control={form.control}
@@ -148,7 +160,7 @@ export function BlockTimeForm({
                 </FormItem>
               )}
             />
-
+ 
             {/* Notes */}
             <FormField
               control={form.control}
@@ -167,7 +179,7 @@ export function BlockTimeForm({
                 </FormItem>
               )}
             />
-
+ 
             <DialogFooter className="mt-6">
               <Button
                 type="button"
@@ -190,4 +202,4 @@ export function BlockTimeForm({
       </DialogContent>
     </Dialog>
   );
-}
+ }

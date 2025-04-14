@@ -39,7 +39,11 @@ export default function NewAppointmentPage({
         const servicesResponse = await fetch(`/api/users/${professionalId}/services`)
         if (!servicesResponse.ok) throw new Error("Échec du chargement des services")
         const servicesData = await servicesResponse.json()
-        setServices(servicesData)
+        // Filtrer le service de blocage de plage
+        const filteredServices = servicesData.filter((service: any) => 
+          service.name !== "Blocage de plage" && service.active === true
+        )
+        setServices(filteredServices)
         
         setIsLoading(false)
         // Ouvrir automatiquement le formulaire une fois les données chargées
@@ -66,6 +70,15 @@ export default function NewAppointmentPage({
       
       if (!response.ok) {
         const errorData = await response.json()
+        
+        // Si c'est un conflit d'horaire, propager l'erreur avec status 409
+        if (response.status === 409) {
+          const error = new Error(errorData.message || "Conflit d'horaire")
+          // @ts-ignore - Ajout d'une propriété personnalisée
+          error.status = 409
+          throw error
+        }
+        
         throw new Error(errorData.error || "Échec de la création du rendez-vous")
       }
       
@@ -74,7 +87,7 @@ export default function NewAppointmentPage({
       return Promise.resolve()
     } catch (error) {
       console.error(error)
-      toast.error("Erreur lors de la création du rendez-vous")
+      // Ne pas afficher de toast ici, on le gère dans le composant enfant
       return Promise.reject(error)
     }
   }

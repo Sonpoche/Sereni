@@ -36,6 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { useSession } from "next-auth/react"
 
 interface AppointmentDetailsProps {
   appointment: any // Type détaillé à définir selon votre modèle
@@ -52,6 +53,7 @@ export default function AppointmentDetails({
   onComplete,
   onDelete,
 }: AppointmentDetailsProps) {
+  const { data: session } = useSession()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -68,7 +70,7 @@ export default function AppointmentDetails({
   
   // Détecter si c'est une absence/plage bloquée
   const isBlockedTime = appointment.status === "CANCELLED" && 
-                      appointment.clientId === "00000000-0000-0000-0000-000000000000";
+                      appointment.client?.user?.email === "system@serenibook.app";
   
   const getStatusBadge = (status: string) => {
     if (isBlockedTime) {
@@ -142,7 +144,7 @@ export default function AppointmentDetails({
       <Card>
         <CardHeader className="pb-2">
           <div className="flex justify-between items-start">
-            <CardTitle>{isBlockedTime ? "Absence" : appointment.service.name}</CardTitle>
+            <CardTitle>{isBlockedTime ? "Blocage de plage" : appointment.service.name}</CardTitle>
             {getStatusBadge(appointment.status)}
           </div>
         </CardHeader>

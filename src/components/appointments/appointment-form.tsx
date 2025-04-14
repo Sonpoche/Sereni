@@ -114,9 +114,22 @@ export function AppointmentForm({
     try {
       await onSubmit(data)
       onOpenChange(false)
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur lors de l'enregistrement du rendez-vous:", error)
-      toast.error("Erreur lors de l'enregistrement du rendez-vous")
+      
+      // Vérifier si l'erreur est un conflit d'horaire 
+      // et extraire le message si disponible
+      if (error.status === 409 || error.message?.includes("Conflit d'horaire")) {
+        toast.error(error.message || "Ce créneau horaire chevauche un rendez-vous existant ou une plage bloquée. Veuillez choisir un autre horaire.", {
+          duration: 5000, // Durée plus longue pour ce message important
+          action: {
+            label: "OK",
+            onClick: () => {}
+          }
+        })
+      } else {
+        toast.error("Erreur lors de l'enregistrement du rendez-vous")
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -207,11 +220,14 @@ export function AppointmentForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {services.map((service) => (
-                        <SelectItem key={service.id} value={service.id}>
-                          {service.name} ({service.duration} min)
-                        </SelectItem>
-                      ))}
+                      {services
+                        .filter(service => service.name !== "Blocage de plage" && service.active !== false) // Filtrer le service de blocage
+                        .map((service) => (
+                          <SelectItem key={service.id} value={service.id}>
+                            {service.name} ({service.duration} min)
+                          </SelectItem>
+                        ))
+                      }
                     </SelectContent>
                   </Select>
                   <FormMessage />

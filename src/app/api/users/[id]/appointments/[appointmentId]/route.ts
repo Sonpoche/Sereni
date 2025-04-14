@@ -136,6 +136,10 @@ export async function PATCH(
       )
     }
     
+    // Si on ne modifie pas la date/heure ou si on annule le rendez-vous, on ne vérifie pas les conflits
+    const isDateTimeChange = validatedData.date || validatedData.startTime
+    const isStatusChangeToCancelled = validatedData.status === "CANCELLED"
+    
     // Préparer les données de mise à jour
     const updateData: any = {}
     
@@ -145,8 +149,12 @@ export async function PATCH(
     if (validatedData.clientId !== undefined) updateData.clientId = validatedData.clientId
     if (validatedData.serviceId !== undefined) updateData.serviceId = validatedData.serviceId
     
+    // Nouvelle date/heure de début et de fin
+    let newStartTime = existingAppointment.startTime
+    let newEndTime = existingAppointment.endTime
+    
     // Si la date ou l'heure est modifiée, recalculer les heures de début et de fin
-    if (validatedData.date || validatedData.startTime) {
+    if (isDateTimeChange) {
       // Récupérer le service pour la durée si nécessaire ou utilisé le service existant
       let serviceDuration = existingAppointment.serviceId === validatedData.serviceId 
         ? null // On garde le même service
@@ -156,31 +164,88 @@ export async function PATCH(
           })
       
       // Extraire la date et l'heure du rendez-vous existant
-      const existingStartTime = existingAppointment.startTime
-      const existingDate = existingStartTime.toISOString().split('T')[0]
-      const existingTime = existingStartTime.toISOString().split('T')[1].substring(0, 5)
+      const existingDate = existingAppointment.startTime.toISOString().split('T')[0]
+      const existingTime = existingAppointment.startTime.toISOString().split('T')[1].substring(0, 5)
       
       // Utiliser les nouvelles valeurs ou conserver les anciennes
       const dateStr = validatedData.date || existingDate
       const startTimeStr = validatedData.startTime || existingTime
       
       // Créer la nouvelle date de début
-      const startTime = new Date(`${dateStr}T${startTimeStr}:00`)
-      updateData.startTime = startTime
+      newStartTime = new Date(`${dateStr}T${startTimeStr}:00`)
+      updateData.startTime = newStartTime
       
       // Calculer la nouvelle heure de fin
-      const endTime = new Date(startTime)
+      newEndTime = new Date(newStartTime)
       const duration = serviceDuration?.duration || 
                       (existingAppointment.endTime.getTime() - existingAppointment.startTime.getTime()) / 60000
       
-      endTime.setMinutes(endTime.getMinutes() + duration)
+      newEndTime.setMinutes(newEndTime.getMinutes() + duration)
       
       // Ajouter le temps tampon si configuré
       if (professional.bufferTime) {
-        endTime.setMinutes(endTime.getMinutes() + professional.bufferTime)
+        newEndTime.setMinutes(newEndTime.getMinutes() + professional.bufferTime)
       }
       
-      updateData.endTime = endTime
+      updateData.endTime = newEndTime
+    }
+    
+    // Vérifier les conflits uniquement si on modifie la date/heure et qu'on n'annule pas
+    if (isDateTimeChange && !isStatusChangeToCancelled) {
+      // Vérifier les conflits avec d'autres rendez-vous (en excluant le rendez-vous actuel)
+      const conflictingAppointment = await prisma.booking.findFirst({
+        where: {
+          professionalId: professional.id,
+          id: { not: appointmentId }, // Exclure le rendez-vous en cours de modification
+          OR: [
+            // Commence pendant un autre rendez-vous/blocage
+            {
+              startTime: { lte: newStartTime },
+              endTime: { gt: newStartTime }
+            },
+            // Finit pendant un autre rendez-vous/blocage
+            {
+              startTime: { lt: newEndTime },
+              endTime: { gte: newEndTime }
+            },
+            // Englobe complètement un autre rendez-vous/blocage
+            {
+              startTime: { gte: newStartTime },
+              endTime: { lte: newEndTime }
+            },
+            // Est entièrement englobé par un autre rendez-vous/blocage
+            {
+              AND: [
+                { startTime: { lte: newStartTime } },
+                { endTime: { gte: newEndTime } }
+              ]
+            }
+          ]
+        },
+        include: {
+          client: {
+            include: {
+              user: true
+            }
+          }
+        }
+      });
+      
+      if (conflictingAppointment) {
+        // Déterminer s'il s'agit d'un rendez-vous normal ou d'une plage bloquée
+        const isBlockedTime = conflictingAppointment.status === "CANCELLED" && 
+          conflictingAppointment.client?.user?.email === "system@serenibook.app";
+      
+        return NextResponse.json(
+          { 
+            error: isBlockedTime 
+              ? "Ce créneau chevauche une plage horaire bloquée. Veuillez d'abord supprimer la plage bloquée."
+              : "Ce créneau est déjà réservé par un autre rendez-vous. Veuillez l'annuler ou le supprimer d'abord.",
+            conflictingAppointment 
+          },
+          { status: 409 }
+        );
+      }
     }
     
     // Mettre à jour le rendez-vous
@@ -265,8 +330,7 @@ export async function DELETE(
       )
     }
     
-    // TOUJOURS supprimer complètement le rendez-vous ou la plage bloquée
-    // au lieu de le marquer comme annulé
+    // Supprimer le rendez-vous
     await prisma.booking.delete({
       where: { id: appointmentId }
     })

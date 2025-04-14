@@ -132,6 +132,69 @@ export async function POST(
       endTime.setMinutes(endTime.getMinutes() + professional.bufferTime)
     }
     
+    // Vérifier s'il existe des rendez-vous qui chevauchent cette plage horaire
+    const overlappingAppointments = await prisma.booking.findMany({
+      where: {
+        professionalId: professional.id,
+        OR: [
+          // Cas 1: Un rendez-vous existant commence pendant notre plage
+          {
+            startTime: {
+              gte: startTime,
+              lt: endTime
+            }
+          },
+          // Cas 2: Un rendez-vous existant se termine pendant notre plage
+          {
+            endTime: {
+              gt: startTime,
+              lte: endTime
+            }
+          },
+          // Cas 3: Un rendez-vous existant couvre entièrement notre plage
+          {
+            startTime: {
+              lte: startTime
+            },
+            endTime: {
+              gte: endTime
+            }
+          }
+        ],
+        // Utiliser AND pour combiner les conditions de statut
+        AND: [
+          {
+            OR: [
+              { status: { not: BookingStatus.CANCELLED } },
+              {
+                AND: [
+                  { status: BookingStatus.CANCELLED },
+                  {
+                    client: {
+                      user: {
+                        email: "system@serenibook.app"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    })
+    
+    // Si des rendez-vous chevauchants sont trouvés, retourner une erreur
+    if (overlappingAppointments.length > 0) {
+      return NextResponse.json(
+        { 
+          error: "Conflit d'horaire", 
+          message: "Un ou plusieurs rendez-vous existants chevauchent cette plage horaire. Veuillez sélectionner un autre créneau."
+        },
+        { status: 409 } // 409 Conflict
+      )
+    }
+    
     // Créer le rendez-vous
     const appointment = await prisma.booking.create({
       data: {

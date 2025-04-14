@@ -57,7 +57,11 @@ export default function RendezVousPage() {
         const servicesResponse = await fetch(`/api/users/${session.user.id}/services`)
         if (servicesResponse.ok) {
           const servicesData = await servicesResponse.json()
-          setServices(servicesData)
+          // Filtrer le service de blocage des plages
+          const filteredServices = servicesData.filter((service: any) => 
+            service.name !== "Blocage de plage" && service.active !== false
+          )
+          setServices(filteredServices)
         }
         
         // Charger les disponibilités
@@ -155,17 +159,30 @@ export default function RendezVousPage() {
         body: JSON.stringify(data),
       })
 
+      // Vérifier le statut HTTP
       if (!response.ok) {
-        throw new Error(`Erreur lors de ${isUpdate ? 'la mise à jour' : 'la création'} du rendez-vous`)
+        const errorData = await response.json();
+        
+        // Cas spécifique pour les conflits (status 409)
+        if (response.status === 409) {
+          const error = new Error(errorData.message || "Ce créneau chevauche un rendez-vous existant");
+          // @ts-ignore - Ajout de propriétés personnalisées
+          error.status = 409;
+          error.message = errorData.message;
+          throw error;
+        }
+        
+        throw new Error(errorData.error || `Erreur lors de ${isUpdate ? 'la mise à jour' : 'la création'} du rendez-vous`);
       }
 
       await refreshAppointments()
       toast.success(`Rendez-vous ${isUpdate ? 'mis à jour' : 'créé'} avec succès`)
       setIsFormOpen(false)
       setSelectedAppointment(null)
+      return Promise.resolve();
     } catch (error) {
       console.error("Erreur:", error)
-      throw error
+      return Promise.reject(error);
     }
   }
 
@@ -180,15 +197,27 @@ export default function RendezVousPage() {
         body: JSON.stringify(data),
       })
 
+      // Vérifier le statut HTTP
       if (!response.ok) {
-        throw new Error("Erreur lors du blocage de la plage horaire")
+        const errorData = await response.json();
+        
+        // Cas spécifique pour les conflits (status 409)
+        if (response.status === 409) {
+          const error = new Error(errorData.message || "Ce créneau chevauche un rendez-vous ou une plage bloquée existante");
+          // @ts-ignore - Ajout de propriétés personnalisées
+          error.status = 409;
+          error.message = errorData.message;
+          throw error;
+        }
+        
+        throw new Error(errorData.error || "Erreur lors du blocage de la plage horaire");
       }
 
       await refreshAppointments()
-      toast.success("Plage horaire bloquée avec succès")
+      return Promise.resolve();
     } catch (error) {
       console.error("Erreur:", error)
-      throw error
+      return Promise.reject(error);
     }
   }
 

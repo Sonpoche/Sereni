@@ -103,7 +103,71 @@ export async function POST(
     const startDate = new Date(`${validatedData.date}T${validatedData.startTime}:00`)
     const endDate = new Date(`${validatedData.date}T${validatedData.endTime}:00`)
     
+    // Vérifier s'il existe des plages blocages ou rendez-vous qui chevauchent cette plage
+    const overlappingBookings = await prisma.booking.findMany({
+      where: {
+        professionalId: professional.id,
+        OR: [
+          // Cas 1: Une réservation existante commence pendant notre plage
+          {
+            startTime: {
+              gte: startDate,
+              lt: endDate
+            }
+          },
+          // Cas 2: Une réservation existante se termine pendant notre plage
+          {
+            endTime: {
+              gt: startDate,
+              lte: endDate
+            }
+          },
+          // Cas 3: Une réservation existante couvre entièrement notre plage
+          {
+            startTime: {
+              lte: startDate
+            },
+            endTime: {
+              gte: endDate
+            }
+          }
+        ],
+        // Utiliser AND pour combiner les conditions de statut
+        AND: [
+          {
+            OR: [
+              { status: { not: BookingStatus.CANCELLED } },
+              {
+                AND: [
+                  { status: BookingStatus.CANCELLED },
+                  {
+                    client: {
+                      user: {
+                        email: "system@serenibook.app"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    })
+    
+    // Si des chevauchements sont trouvés, retourner une erreur
+    if (overlappingBookings.length > 0) {
+      return NextResponse.json(
+        { 
+          error: "Conflit d'horaire", 
+          message: "Un ou plusieurs rendez-vous ou plages bloquées existants chevauchent cette plage horaire. Veuillez sélectionner un autre créneau."
+        },
+        { status: 409 } // 409 Conflict
+      )
+    }
+    
     // Trouver ou créer un service pour les plages bloquées
+    // Utiliser findFirst au lieu de findMany pour éviter les doublons
     let blockingService = await prisma.service.findFirst({
       where: { 
         professionalId: professional.id,
@@ -111,6 +175,7 @@ export async function POST(
       }
     })
     
+    // Si le service n'existe pas, on le crée une seule fois
     if (!blockingService) {
       blockingService = await prisma.service.create({
         data: {
@@ -119,7 +184,7 @@ export async function POST(
           duration: 60, // Durée par défaut
           price: 0,
           professionalId: professional.id,
-          active: true
+          active: false // Marquer comme inactif pour qu'il n'apparaisse pas dans la liste des services
         }
       })
     }
@@ -139,7 +204,7 @@ export async function POST(
         where: { email: "system@serenibook.app" }
       }) || await prisma.user.create({
         data: {
-          name: "Absence",
+          name: "Système",
           email: "system@serenibook.app",
           role: "CLIENT",
           hasProfile: true
