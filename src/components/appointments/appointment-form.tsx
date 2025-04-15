@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Loader2, UserPlus } from "lucide-react"
+import { Loader2, UserPlus, Users } from "lucide-react"
 import {
   Form,
   FormControl,
@@ -15,6 +15,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form"
 import {
   Dialog,
@@ -33,16 +34,47 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { NewClientForm } from "@/components/clients/new-client-form"
+import { RecurrenceForm } from "./recurrence-form"
 import { useSession } from "next-auth/react"
 
 const appointmentSchema = z.object({
-  clientId: z.string().min(1, "Client requis"),
+  clientId: z.string().min(1, "Client requis").optional().or(z.literal('')),
   serviceId: z.string().min(1, "Service requis"),
   date: z.string().min(1, "Date requise"),
   startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format d'heure invalide (HH:MM)"),
   notes: z.string().optional(),
+  // Options de récurrence
+  recurrence: z.object({
+    enabled: z.boolean().default(false),
+    type: z.enum(["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY"]).optional(),
+    weekdays: z.array(z.string()).optional(),
+    monthDay: z.number().optional(),
+    endType: z.enum(["never", "after", "on"]).default("never"),
+    endAfter: z.number().optional(),
+    endDate: z.string().optional(),
+  }).optional().default({
+    enabled: false,
+    endType: "never",
+  }),
+  isGroupClass: z.boolean().default(false),
+  maxParticipants: z.number().min(2).optional(),
 })
+  .refine(
+    (data) => {
+      // Si c'est un cours collectif, maxParticipants est obligatoire
+      if (data.isGroupClass) {
+        return !!data.maxParticipants && data.maxParticipants >= 2;
+      }
+      // Si ce n'est pas un cours collectif, clientId est obligatoire
+      return !!data.clientId;
+    },
+    {
+      message: "Champ obligatoire",
+      path: ["clientId"], // Le champ où l'erreur doit être affichée
+    }
+  );
 
 type AppointmentFormValues = z.infer<typeof appointmentSchema>
 
@@ -52,7 +84,7 @@ interface AppointmentFormProps {
   onSubmit: (data: AppointmentFormValues) => Promise<void>
   defaultValues?: Partial<AppointmentFormValues>
   clients: { id: string; user: { name: string; email: string } }[]
-  services: { id: string; name: string; duration: number }[]
+  services: { id: string; name: string; duration: number; maxParticipants?: number }[]
 }
 
 export function AppointmentForm({
@@ -66,6 +98,7 @@ export function AppointmentForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isNewClientFormOpen, setIsNewClientFormOpen] = useState(false)
   const [localClients, setLocalClients] = useState(clients)
+  const [selectedService, setSelectedService] = useState<any>(null)
   const { data: session } = useSession()
   
   const form = useForm<AppointmentFormValues>({
@@ -76,6 +109,11 @@ export function AppointmentForm({
       date: new Date().toISOString().split('T')[0],
       startTime: "09:00",
       notes: "",
+      recurrence: {
+        enabled: false,
+        endType: "never",
+      },
+      isGroupClass: false,
     },
   })
   
@@ -87,19 +125,32 @@ export function AppointmentForm({
   // Reset form when opened/closed or defaultValues change
   useEffect(() => {
     if (open) {
-      console.log("Valeurs par défaut:", defaultValues);
-      
       form.reset(defaultValues || {
         clientId: "",
         serviceId: "",
         date: new Date().toISOString().split('T')[0],
         startTime: "09:00",
         notes: "",
+        recurrence: {
+          enabled: false,
+          endType: "never",
+        },
+        isGroupClass: false,
       })
-      
-      console.log("Valeurs après reset:", form.getValues());
     }
   }, [open, defaultValues, form])
+  
+  // Observer les changements de service
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === 'serviceId' && value.serviceId) {
+        const service = services.find(s => s.id === value.serviceId)
+        setSelectedService(service)
+      }
+    })
+    
+    return () => subscription.unsubscribe()
+  }, [form, services])
 
   // Gérer l'ajout d'un nouveau client
   const handleNewClientSuccess = (client: any) => {
@@ -137,10 +188,11 @@ export function AppointmentForm({
   
   // Chercher le nom du client préselectionné
   const selectedClient = localClients.find(c => c.id === form.getValues().clientId);
+  const isGroupClassPossible = !defaultValues?.clientId && selectedService?.maxParticipants > 1;
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {defaultValues?.clientId ? "Modifier le rendez-vous" : "Nouveau rendez-vous"}
@@ -154,55 +206,6 @@ export function AppointmentForm({
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Sélection du client */}
-            <FormField
-              control={form.control}
-              name="clientId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client</FormLabel>
-                  <div className="flex items-center space-x-2">
-                    {defaultValues?.clientId ? (
-                      <div className="flex-1 p-2 border rounded flex items-center h-10">
-                        <span>
-                          {selectedClient?.user?.name || 'Client sélectionné'}
-                        </span>
-                        <input type="hidden" {...field} />
-                      </div>
-                    ) : (
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="Sélectionner un client" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {localClients.map((client) => (
-                            <SelectItem key={client.id} value={client.id}>
-                              {client.user.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setIsNewClientFormOpen(true)}
-                      title="Ajouter un nouveau client"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
             {/* Sélection du service */}
             <FormField
               control={form.control}
@@ -211,7 +214,11 @@ export function AppointmentForm({
                 <FormItem>
                   <FormLabel>Service</FormLabel>
                   <Select 
-                    onValueChange={field.onChange} 
+                    onValueChange={(value) => {
+                      field.onChange(value)
+                      // Réinitialiser isGroupClass si on change de service
+                      form.setValue("isGroupClass", false)
+                    }} 
                     value={field.value}
                   >
                     <FormControl>
@@ -221,10 +228,11 @@ export function AppointmentForm({
                     </FormControl>
                     <SelectContent>
                       {services
-                        .filter(service => service.name !== "Blocage de plage" && service.active !== false) // Filtrer le service de blocage
+                        .filter(service => service.name !== "Blocage de plage" && (service as any).active !== false) // Filtrer le service de blocage
                         .map((service) => (
                           <SelectItem key={service.id} value={service.id}>
-                            {service.name} ({service.duration} min)
+                            {service.name} ({service.duration} min) 
+                            {service.maxParticipants && service.maxParticipants > 1 && ` - Groupe (max ${service.maxParticipants})`}
                           </SelectItem>
                         ))
                       }
@@ -234,6 +242,105 @@ export function AppointmentForm({
                 </FormItem>
               )}
             />
+            
+            {/* Option cours collectif si applicable */}
+            {isGroupClassPossible && (
+              <FormField
+                control={form.control}
+                name="isGroupClass"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 p-4 border rounded-md">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Cours collectif</FormLabel>
+                      <FormDescription>
+                        Créer un cours collectif ouvert aux inscriptions
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            )}
+            
+            {/* Capacité du cours si c'est un cours collectif */}
+            {form.watch("isGroupClass") && (
+              <FormField
+                control={form.control}
+                name="maxParticipants"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre maximum de participants</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number"
+                        min="2"
+                        max={selectedService?.maxParticipants || 30}
+                        {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                        value={field.value || selectedService?.maxParticipants || 10}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Sélection du client (uniquement si ce n'est pas un cours collectif) */}
+            {!form.watch("isGroupClass") && (
+              <FormField
+                control={form.control}
+                name="clientId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client</FormLabel>
+                    <div className="flex items-center space-x-2">
+                      {defaultValues?.clientId ? (
+                        <div className="flex-1 p-2 border rounded flex items-center h-10">
+                          <span>
+                            {selectedClient?.user?.name || 'Client sélectionné'}
+                          </span>
+                          <input type="hidden" {...field} />
+                        </div>
+                      ) : (
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Sélectionner un client" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {localClients.map((client) => (
+                              <SelectItem key={client.id} value={client.id}>
+                                {client.user.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setIsNewClientFormOpen(true)}
+                        title="Ajouter un nouveau client"
+                      >
+                        <UserPlus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             
             {/* Date et heure */}
             <div className="grid grid-cols-2 gap-4">
@@ -289,7 +396,12 @@ export function AppointmentForm({
               )}
             />
             
-            <DialogFooter className="mt-6">
+            {/* Options de récurrence - seulement pour les nouveaux rendez-vous et pas pour les cours en groupe */}
+            {!defaultValues?.clientId && !form.watch("isGroupClass") && (
+              <RecurrenceForm control={form.control} startDate={form.watch('date')} />
+            )}
+            
+            <DialogFooter className="mt-6 sticky bottom-0 bg-white pt-2 pb-2 border-t">
               <Button 
                 type="button" 
                 variant="outline" 
@@ -303,7 +415,7 @@ export function AppointmentForm({
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Enregistrement...
                   </>
-                ) : defaultValues?.clientId ? "Mettre à jour" : "Créer"}
+                ) : form.watch("isGroupClass") ? "Créer le cours collectif" : defaultValues?.clientId ? "Mettre à jour" : "Créer"}
               </Button>
             </DialogFooter>
           </form>

@@ -453,6 +453,7 @@ export default function AppointmentView({
                 <AppointmentCalendar 
                   appointments={appointments} 
                   view={calendarView}
+                  currentDate={currentDate}
                   availability={availability}
                   onEventClick={handleAppointmentClick}
                   onDateSelect={handleDateSelect}

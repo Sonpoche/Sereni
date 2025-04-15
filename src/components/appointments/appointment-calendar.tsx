@@ -15,19 +15,25 @@ import { Info } from 'lucide-react'
 interface AppointmentCalendarProps {
   appointments: any[]
   view: 'month' | 'week' | 'day'
+  currentDate: Date
   onEventClick: (info: any) => void
   onDateSelect: (info: any) => void
-  availability?: any[] // Plages horaires configurées par le praticien
+  onDateNavigate?: (date: Date) => void
+  availability?: any[]
+  calendarRef?: React.RefObject<any>
 }
 
 export default function AppointmentCalendar({ 
   appointments, 
   view, 
+  currentDate,
   onEventClick, 
   onDateSelect,
-  availability = []
+  onDateNavigate,
+  availability = [],
+  calendarRef
 }: AppointmentCalendarProps) {
-  const calendarRef = useRef<HTMLDivElement>(null)
+  const calendarElRef = useRef<HTMLDivElement>(null)
   const calendarInstanceRef = useRef<Calendar | null>(null)
   const router = useRouter()
   const [showAvailabilityAlert, setShowAvailabilityAlert] = useState(false)
@@ -75,8 +81,8 @@ export default function AppointmentCalendar({
 
   // Initialisation du calendrier
   useEffect(() => {
-    if (calendarRef.current) {
-      const calendarEl = calendarRef.current
+    if (calendarElRef.current) {
+      const calendarEl = calendarElRef.current
       
       // Liste des jours fermés
       const closedDays = getClosedDays()
@@ -276,6 +282,17 @@ export default function AppointmentCalendar({
           overflow: hidden;
           text-overflow: ellipsis;
         }
+        
+        /* Styles pour les cours collectifs */
+        .fc .fc-event[data-group="true"] {
+          background-color: #dbeafe;
+          border-left: 4px solid #2563eb;
+          color: #1e40af;
+        }
+        .fc .fc-event[data-group="true"]::after {
+          content: " 👥";
+          font-size: 0.8rem;
+        }
       `
       document.head.appendChild(style)
       
@@ -283,6 +300,7 @@ export default function AppointmentCalendar({
         plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
         initialView: view === 'month' ? 'dayGridMonth' : 
                     view === 'week' ? 'timeGridWeek' : 'timeGridDay',
+        initialDate: currentDate,
         headerToolbar: false,
         locale: frLocale,
         allDaySlot: false,
@@ -313,7 +331,8 @@ export default function AppointmentCalendar({
         events: appointments.map(appointment => {
           // Déterminer si c'est une absence système
           const isSystemAbsence = appointment.status === "CANCELLED" && 
-                                 appointment.clientId === "00000000-0000-0000-0000-000000000000"
+                                 (appointment.client?.user?.email === "system@serenibook.app" ||
+                                  appointment.clientId === "00000000-0000-0000-0000-000000000000")
           
           return {
             id: appointment.id,
@@ -329,7 +348,11 @@ export default function AppointmentCalendar({
               serviceName: appointment.service?.name || '',
               servicePrice: appointment.service?.price || 0,
               status: appointment.status,
-              isSystemAbsence: isSystemAbsence
+              isSystemAbsence: isSystemAbsence,
+              isRecurring: appointment.isRecurring || false,
+              isGroupClass: appointment.isGroupClass || false,
+              maxParticipants: appointment.maxParticipants || 1,
+              currentParticipants: appointment.currentParticipants || 0
             }
           }
         }),
@@ -337,6 +360,10 @@ export default function AppointmentCalendar({
           const clientName = arg.event.title;
           const status = arg.event.extendedProps.status;
           const isSystemAbsence = arg.event.extendedProps.isSystemAbsence;
+          const isRecurring = arg.event.extendedProps.isRecurring;
+          const isGroupClass = arg.event.extendedProps.isGroupClass;
+          const maxParticipants = arg.event.extendedProps.maxParticipants;
+          const currentParticipants = arg.event.extendedProps.currentParticipants;
           
           // Afficher uniquement l'heure de début
           const startTime = arg.event.start ? new Date(arg.event.start).toLocaleTimeString('fr-FR', {
@@ -368,11 +395,21 @@ export default function AppointmentCalendar({
             `}
           }
           
+          let icons = '';
+          
+          if (isRecurring) {
+            icons += '<svg class="h-3 w-3 ml-1 inline" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a7 7 0 100 14 7 7 0 000-14zm0 1a6 6 0 110 12 6 6 0 010-12z"/><path d="M10 4a6 6 0 00-6 6h2a4 4 0 014-4V4z"/></svg>';
+          }
+          
+          if (isGroupClass) {
+            icons += `<span class="ml-1 text-xs">(${currentParticipants}/${maxParticipants})</span>`;
+          }
+          
           return { html: `
             <div class="appointment-content">
               <div class="flex items-center">
                 <span class="font-semibold ${textColor}">${startTime}</span>
-                <span class="ml-2 ${textColor}">${clientName}</span>
+                <span class="ml-2 ${textColor} truncate">${clientName}${icons}</span>
               </div>
             </div>
           `}
@@ -380,121 +417,140 @@ export default function AppointmentCalendar({
 
         eventDidMount: function(info) {
           if (info.event.extendedProps.isSystemAbsence) {
-            info.el.setAttribute('data-system', 'true')
+            info.el.setAttribute('data-system', 'true');
+          }
+          
+          if (info.event.extendedProps.isRecurring) {
+            info.el.setAttribute('data-recurring', 'true');
+          }
+          
+          if (info.event.extendedProps.isGroupClass) {
+            info.el.setAttribute('data-group', 'true');
           }
           
           // Si l'événement a le titre "FERMÉ", le masquer
           if (info.event.title === 'FERMÉ') {
-            info.el.classList.add('fc-event-fermé')
+            info.el.classList.add('fc-event-fermé');
           }
           
           // Supprimer tout point/carré vert ou autre indicateur visuel non désiré
-          const dots = info.el.querySelectorAll('.fc-daygrid-event-dot')
-          dots.forEach(dot => dot.remove())
+          const dots = info.el.querySelectorAll('.fc-daygrid-event-dot');
+          dots.forEach(dot => dot.remove());
         },
         
         // Fonction qui s'exécute après un changement de vue ou de dates
         datesSet: function(info) {
           setTimeout(() => {
-            applyClosedDaysStyle()
-          }, 100)
+            applyClosedDaysStyle();
+          }, 100);
+          
+          // Notifier le parent du changement de date
+          if (onDateNavigate) {
+            onDateNavigate(info.view.calendar.getDate());
+          }
         },
         
         // Empêcher la sélection sur les jours fermés
         selectAllow: function(selectInfo) {
-          const startDay = selectInfo.start.getDay()
-          return !closedDays.includes(startDay)
+          const startDay = selectInfo.start.getDay();
+          return !closedDays.includes(startDay);
         },
         
         eventClick: onEventClick,
         
         select: function(info) {
           // Vérifier si le jour est fermé
-          const dayOfWeek = info.start.getDay()
+          const dayOfWeek = info.start.getDay();
           if (!closedDays.includes(dayOfWeek)) {
-            onDateSelect(info)
+            onDateSelect(info);
           } else {
-            calendar.unselect()
+            calendar.unselect();
           }
         },
-      })
+      });
       
       // Fonction pour appliquer les styles aux jours fermés
       const applyClosedDaysStyle = () => {
         // Nettoyer les classes existantes
         document.querySelectorAll('.fc-day-closed').forEach(el => {
-          el.classList.remove('fc-day-closed')
-        })
+          el.classList.remove('fc-day-closed');
+        });
         
         // Vue mois
         if (calendar.view.type === 'dayGridMonth') {
           document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
-            const dateAttr = dayEl.getAttribute('data-date')
+            const dateAttr = dayEl.getAttribute('data-date');
             if (dateAttr) {
-              const date = new Date(dateAttr)
-              const dayOfWeek = date.getDay()
+              const date = new Date(dateAttr);
+              const dayOfWeek = date.getDay();
               if (closedDays.includes(dayOfWeek)) {
-                dayEl.classList.add('fc-day-closed')
+                dayEl.classList.add('fc-day-closed');
               }
             }
-          })
+          });
         } 
         // Vue semaine ou jour
         else if (calendar.view.type.includes('timeGrid')) {
           // Pour chaque colonne de jour
           document.querySelectorAll('.fc-col-header-cell').forEach((headerEl) => {
-            const dateAttr = headerEl.getAttribute('data-date')
+            const dateAttr = headerEl.getAttribute('data-date');
             if (dateAttr) {
-              const date = new Date(dateAttr)
-              const dayOfWeek = date.getDay()
+              const date = new Date(dateAttr);
+              const dayOfWeek = date.getDay();
               
               if (closedDays.includes(dayOfWeek)) {
                 // Marquer l'en-tête du jour
-                headerEl.classList.add('fc-day-closed')
+                headerEl.classList.add('fc-day-closed');
                 
                 // Trouver et marquer la colonne correspondante
                 if (headerEl.parentElement) {
-                  const headerIndex = Array.from(headerEl.parentElement.children).indexOf(headerEl)
+                  const headerIndex = Array.from(headerEl.parentElement.children).indexOf(headerEl);
                   if (headerIndex !== -1) {
-                    const columns = document.querySelectorAll('.fc-timegrid-col')
+                    const columns = document.querySelectorAll('.fc-timegrid-col');
                     if (columns[headerIndex]) {
-                      columns[headerIndex].classList.add('fc-day-closed')
+                      columns[headerIndex].classList.add('fc-day-closed');
                     }
                   }
                 }
               }
             }
-          })
+          });
           
           // S'assurer que les tranches de 15 minutes sont bien visibles
           document.querySelectorAll('.fc-timegrid-slot-minor').forEach(slot => {
-            (slot as HTMLElement).style.borderTop = '1px dashed #e2e8f0'
-          })
+            (slot as HTMLElement).style.borderTop = '1px dashed #e2e8f0';
+          });
         }
         
         // Supprimer les petits carrés verts indésirables
         document.querySelectorAll('.fc-daygrid-event-dot').forEach(dot => {
-          dot.remove()
-        })
-      }
+          dot.remove();
+        });
+      };
       
-      calendar.render()
-      calendarInstanceRef.current = calendar
+      calendar.render();
+      calendarInstanceRef.current = calendar;
+      
+      // Correction importante pour la référence du calendrier
+      if (calendarRef && typeof calendarRef === 'object' && 'current' in calendarRef) {
+        // @ts-ignore - Nécessaire pour assigner la valeur
+        calendarRef.current = calendar;
+      }
       
       // Appliquer les styles après le rendu initial
       setTimeout(() => {
-        applyClosedDaysStyle()
-      }, 200)
+        applyClosedDaysStyle();
+      }, 200);
       
       return () => {
-        calendar.destroy()
-        calendarInstanceRef.current = null
+        calendar.destroy();
+        calendarInstanceRef.current = null;
         if (style.parentNode) {
-          style.parentNode.removeChild(style)
+          style.parentNode.removeChild(style);
         }
-      }
+      };
     }
-  }, [appointments, view, onEventClick, onDateSelect, availability])
+  }, [appointments, view, onEventClick, onDateSelect, availability, currentDate, onDateNavigate, calendarRef]);
 
   // Mettre à jour la vue lorsque la prop view change
   useEffect(() => {
@@ -503,10 +559,17 @@ export default function AppointmentCalendar({
         month: 'dayGridMonth',
         week: 'timeGridWeek',
         day: 'timeGridDay'
-      }
-      calendarInstanceRef.current.changeView(viewMap[view])
+      };
+      calendarInstanceRef.current.changeView(viewMap[view]);
     }
-  }, [view])
+  }, [view]);
+  
+  // Mettre à jour la date lorsque currentDate change
+  useEffect(() => {
+    if (calendarInstanceRef.current) {
+      calendarInstanceRef.current.gotoDate(currentDate);
+    }
+  }, [currentDate]);
 
   return (
     <div className="space-y-4">
@@ -526,7 +589,7 @@ export default function AppointmentCalendar({
           </AlertDescription>
         </Alert>
       )}
-      <div ref={calendarRef} className="min-h-[600px]" />
+      <div ref={calendarElRef} className="min-h-[600px]" />
     </div>
-  )
+  );
 }

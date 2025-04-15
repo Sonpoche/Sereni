@@ -1,7 +1,7 @@
 // src/components/profile/services-tab.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Loader2, Plus, Edit, Trash2, Clock, Euro, Palette } from "lucide-react"
+import { Loader2, Plus, Edit, Trash2, Clock, Euro, Palette, MapPin } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
@@ -70,6 +69,25 @@ const serviceSchema = z.object({
 
 type ServiceFormValues = z.infer<typeof serviceSchema>
 
+// Couleurs prédéfinies pour le sélecteur
+const predefinedColors = [
+  "#6746c3", // Violet/Lavande
+  "#5B21B6", // Violet foncé
+  "#1D4ED8", // Bleu
+  "#0EA5E9", // Bleu ciel
+  "#06B6D4", // Cyan
+  "#059669", // Vert
+  "#10B981", // Vert émeraude 
+  "#84CC16", // Vert lime
+  "#FBBF24", // Jaune
+  "#F59E0B", // Jaune foncé
+  "#F97316", // Orange
+  "#E11D48", // Rouge
+  "#EC4899", // Rose
+  "#8B5CF6", // Violet clair
+  "#6B7280", // Gris
+];
+
 export default function ServicesTab({ profileData }: { profileData: ProfileData }) {
   const { data: session } = useSession()
   const [services, setServices] = useState<Service[]>([])
@@ -79,6 +97,7 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [currentServiceId, setCurrentServiceId] = useState<string | null>(null)
   const [deleteServiceId, setDeleteServiceId] = useState<string | null>(null)
+  const colorPickerRef = useRef<HTMLDivElement>(null)
 
   // Configuration du formulaire
   const form = useForm<ServiceFormValues>({
@@ -94,6 +113,9 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
       location: "",
     }
   })
+
+  // Récupérer la valeur actuelle de la couleur du formulaire
+  const currentColor = form.watch("color") || "#6746c3";
 
   // Chargement des services
   useEffect(() => {
@@ -186,6 +208,11 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
     }
   }
 
+  // Fonction pour sélectionner une couleur
+  const selectColor = (color: string) => {
+    form.setValue("color", color);
+  };
+
   // Soumission du formulaire
   async function onSubmit(data: ServiceFormValues) {
     setIsSubmitting(true)
@@ -243,6 +270,14 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
       </div>
     )
   }
+
+  // Style personnalisé pour le label avec icône
+  const LabelWithIcon = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => (
+    <div className="flex items-center gap-2">
+      {icon}
+      <span className="font-medium text-gray-700">{children}</span>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -314,14 +349,16 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
           </DialogHeader>
           
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               {/* Nom du service */}
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nom du service</FormLabel>
+                    <div className="mb-2">
+                      <FormLabel>Nom du service</FormLabel>
+                    </div>
                     <FormControl>
                       <Input placeholder="Ex: Séance de yoga, Massage relaxant..." {...field} />
                     </FormControl>
@@ -336,7 +373,9 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <div className="mb-2">
+                      <FormLabel>Description</FormLabel>
+                    </div>
                     <FormControl>
                       <Textarea 
                         placeholder="Décrivez le service que vous proposez..." 
@@ -356,10 +395,11 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
                   name="duration"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-primary/60" />
-                        Durée (min)
-                      </FormLabel>
+                      <div className="mb-2">
+                        <LabelWithIcon icon={<Clock className="h-4 w-4 text-primary/60" />}>
+                          Durée (min)
+                        </LabelWithIcon>
+                      </div>
                       <FormControl>
                         <Input 
                           type="number" 
@@ -379,10 +419,11 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
                   name="price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Euro className="h-4 w-4 text-primary/60" />
-                        Prix (€)
-                      </FormLabel>
+                      <div className="mb-2">
+                        <LabelWithIcon icon={<Euro className="h-4 w-4 text-primary/60" />}>
+                          Prix (€)
+                        </LabelWithIcon>
+                      </div>
                       <FormControl>
                         <Input 
                           type="number" 
@@ -398,29 +439,34 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
                 />
               </div>
               
-              {/* Couleur */}
+              {/* Couleur avec sélecteur visuel */}
               <FormField
                 control={form.control}
                 name="color"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <Palette className="h-4 w-4 text-primary/60" />
-                      Couleur
-                    </FormLabel>
+                    <div className="mb-2">
+                      <LabelWithIcon icon={<Palette className="h-4 w-4 text-primary/60" />}>
+                        Couleur
+                      </LabelWithIcon>
+                    </div>
                     <FormControl>
-                      <div className="flex items-center gap-2">
-                        <Input 
-                          // Changé de color à text pour éviter l'erreur de typage
-                          type="text"
-                          // Utiliser un input de type hidden pour stocker la valeur
-                          className="w-12 h-10 p-1" 
-                          {...field} 
-                        />
+                      <div className="flex items-center gap-2 w-full">
                         <div 
-                          className="grow h-10 rounded-md" 
-                          style={{ backgroundColor: field.value }}
+                          className="w-10 h-10 rounded-md border"
+                          style={{ backgroundColor: currentColor }}
                         />
+                        <div className="flex flex-wrap gap-2 flex-1">
+                          {predefinedColors.map(color => (
+                            <button
+                              key={color}
+                              type="button"
+                              className={`w-6 h-6 rounded-md cursor-pointer hover:scale-110 transition-transform ${currentColor === color ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+                              style={{ backgroundColor: color }}
+                              onClick={() => selectColor(color)}
+                            />
+                          ))}
+                        </div>
                       </div>
                     </FormControl>
                     <FormMessage />
@@ -434,9 +480,16 @@ export default function ServicesTab({ profileData }: { profileData: ProfileData 
                 name="location"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Lieu</FormLabel>
+                    <div className="mb-2">
+                      <LabelWithIcon icon={<MapPin className="h-4 w-4 text-primary/60" />}>
+                        Lieu
+                      </LabelWithIcon>
+                    </div>
                     <FormControl>
-                      <Input placeholder="Ex: En cabinet, À domicile, En ligne..." {...field} />
+                      <Input 
+                        placeholder="Ex: En cabinet, À domicile, En ligne..."
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

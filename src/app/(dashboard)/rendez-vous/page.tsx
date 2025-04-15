@@ -29,6 +29,7 @@ export default function RendezVousPage() {
   const [formDefaultValues, setFormDefaultValues] = useState<any | null>(null)
   const [blockTimeDefaultValues, setBlockTimeDefaultValues] = useState<any | null>(null)
   const calendarRef = useRef<any>(null)
+  const [isUpdatingDate, setIsUpdatingDate] = useState(false)
 
   // Charger les données initiales
   useEffect(() => {
@@ -101,29 +102,41 @@ export default function RendezVousPage() {
   }, [session])
 
   // Navigation du calendrier
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (calendarRef.current) {
       calendarRef.current.prev()
-      setCurrentDate(calendarRef.current.getDate())
+      // La mise à jour de currentDate sera gérée par onDateNavigate via datesSet
     }
-  }
+  }, [])
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (calendarRef.current) {
       calendarRef.current.next()
-      setCurrentDate(calendarRef.current.getDate())
+      // La mise à jour de currentDate sera gérée par onDateNavigate via datesSet
     }
-  }
+  }, [])
 
-  const handleToday = () => {
+  const handleToday = useCallback(() => {
     if (calendarRef.current) {
       calendarRef.current.today()
-      setCurrentDate(calendarRef.current.getDate())
+      // La mise à jour de currentDate sera gérée par onDateNavigate via datesSet
     }
-  }
+  }, [])
+
+  const handleDateNavigate = useCallback((date: Date) => {
+    // Vérifier si la date a réellement changé pour éviter les mises à jour inutiles
+    if (!isUpdatingDate && date.getTime() !== currentDate.getTime()) {
+      setIsUpdatingDate(true)
+      setCurrentDate(date)
+      // Réinitialiser le flag après un court délai
+      setTimeout(() => {
+        setIsUpdatingDate(false)
+      }, 50)
+    }
+  }, [currentDate, isUpdatingDate])
 
   // Gestion des événements du calendrier
-  const handleDateSelect = (info: any) => {
+  const handleDateSelect = useCallback((info: any) => {
     setSelectedDate(info.start)
     setSelectedAppointment(null)
     setFormDefaultValues({
@@ -131,15 +144,15 @@ export default function RendezVousPage() {
       startTime: new Date(info.start).toTimeString().substring(0, 5)
     })
     setIsFormOpen(true)
-  }
+  }, [])
 
-  const handleEventClick = (info: any) => {
+  const handleEventClick = useCallback((info: any) => {
     const appointmentId = info.event.id
     const appointment = appointments.find((app: any) => app.id === appointmentId)
     if (appointment) {
       setSelectedAppointment(appointment)
     }
-  }
+  }, [appointments])
 
   // Gestion des formulaires
   const handleAppointmentSubmit = async (data: any) => {
@@ -150,6 +163,14 @@ export default function RendezVousPage() {
         : `/api/users/${session?.user?.id}/appointments`
       
       const method = isUpdate ? "PATCH" : "POST"
+      
+      // Gérer la récurrence si activée
+      const hasRecurrence = !isUpdate && data.recurrence && data.recurrence.enabled
+      
+      // Supprimer les données de récurrence si c'est une mise à jour ou si elle n'est pas activée
+      if (isUpdate || !hasRecurrence) {
+        delete data.recurrence
+      }
       
       const response = await fetch(url, {
         method,
@@ -175,10 +196,45 @@ export default function RendezVousPage() {
         throw new Error(errorData.error || `Erreur lors de ${isUpdate ? 'la mise à jour' : 'la création'} du rendez-vous`);
       }
 
-      await refreshAppointments()
-      toast.success(`Rendez-vous ${isUpdate ? 'mis à jour' : 'créé'} avec succès`)
-      setIsFormOpen(false)
-      setSelectedAppointment(null)
+      const appointmentData = await response.json();
+      
+      // Traiter la récurrence si nécessaire
+      if (hasRecurrence && appointmentData.id) {
+        try {
+          const recurrenceResponse = await fetch(`/api/users/${session?.user?.id}/appointments/recurrence`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              originalBookingId: appointmentData.id,
+              type: data.recurrence.type,
+              weekdays: data.recurrence.weekdays || [],
+              monthDay: data.recurrence.monthDay,
+              endType: data.recurrence.endType,
+              endAfter: data.recurrence.endAfter,
+              endDate: data.recurrence.endDate,
+            }),
+          });
+          
+          if (!recurrenceResponse.ok) {
+            const recurrenceError = await recurrenceResponse.json();
+            console.warn("Récurrence créée partiellement:", recurrenceError);
+            toast.info("Rendez-vous créé mais problème avec la récurrence");
+          } else {
+            toast.success("Rendez-vous récurrent créé avec succès");
+          }
+        } catch (recurrenceError) {
+          console.error("Erreur lors de la création de la récurrence:", recurrenceError);
+          toast.info("Rendez-vous créé mais problème avec la récurrence");
+        }
+      } else {
+        toast.success(`Rendez-vous ${isUpdate ? 'mis à jour' : 'créé'} avec succès`);
+      }
+
+      await refreshAppointments();
+      setIsFormOpen(false);
+      setSelectedAppointment(null);
       return Promise.resolve();
     } catch (error) {
       console.error("Erreur:", error)
@@ -214,6 +270,8 @@ export default function RendezVousPage() {
       }
 
       await refreshAppointments()
+      toast.success("Plage horaire bloquée avec succès");
+      setIsBlockTimeFormOpen(false);
       return Promise.resolve();
     } catch (error) {
       console.error("Erreur:", error)
@@ -371,9 +429,12 @@ export default function RendezVousPage() {
               <AppointmentCalendar 
                 appointments={appointments}
                 view={calendarView}
+                currentDate={currentDate}
                 onEventClick={handleEventClick}
                 onDateSelect={handleDateSelect}
+                onDateNavigate={handleDateNavigate}
                 availability={availability}
+                calendarRef={calendarRef}
               />
             </CardContent>
           </Card>
