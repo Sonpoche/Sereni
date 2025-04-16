@@ -2,6 +2,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -22,7 +23,8 @@ import {
   CheckCircle, 
   XCircle,
   Edit,
-  Trash
+  Trash,
+  Users
 } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { toast } from "sonner"
@@ -54,6 +56,7 @@ export default function AppointmentDetails({
   onDelete,
 }: AppointmentDetailsProps) {
   const { data: session } = useSession()
+  const router = useRouter()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -67,6 +70,129 @@ export default function AppointmentDetails({
     hour: '2-digit',
     minute: '2-digit'
   })
+  
+  // Détection du cours collectif
+  const isGroupClass = appointment.isGroupClass === true;
+  
+  // Si c'est un cours collectif, afficher une interface spécifique
+  if (isGroupClass) {
+    return (
+      <>
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-start">
+              <CardTitle>{appointment.service.name}</CardTitle>
+              <Badge className="bg-blue-100 text-blue-800 border-blue-300">
+                Cours collectif
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Informations du cours */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Users className="h-4 w-4 text-primary" />
+                <span className="font-medium">
+                  {appointment.currentParticipants}/{appointment.maxParticipants} participants
+                </span>
+              </div>
+            </div>
+            
+            {/* Informations date/heure */}
+            <div className="border-t border-b py-4 space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="h-4 w-4 text-gray-500" />
+                <span>{formattedDate}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-4 w-4 text-gray-500" />
+                <span>{startTime} - {endTime}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Tag className="h-4 w-4 text-gray-500" />
+                <span>{appointment.service.price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span>
+              </div>
+            </div>
+            
+            {/* Notes */}
+            {appointment.notes && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-gray-500" />
+                  Notes
+                </h4>
+                <p className="text-sm text-gray-600">{appointment.notes}</p>
+              </div>
+            )}
+          </CardContent>
+          <CardFooter className="flex justify-between pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/cours-collectifs?id=${appointment.id}`)}
+            >
+              <Users className="h-4 w-4 mr-1" />
+              Gérer les participants
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isLoading}
+            >
+              <Trash className="h-4 w-4 mr-1" />
+              Supprimer
+            </Button>
+          </CardFooter>
+        </Card>
+        
+        {/* Dialogue de confirmation pour la suppression */}
+        <AlertDialog 
+          open={isDeleteDialogOpen} 
+          onOpenChange={setIsDeleteDialogOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Cette action est irréversible. Le cours collectif sera définitivement supprimé de votre agenda.
+                {appointment.groupParticipants && appointment.groupParticipants.length > 0 && (
+                  <strong className="block mt-2 text-red-600">
+                    Attention : {appointment.groupParticipants.length} participant(s) sont inscrits à ce cours.
+                  </strong>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isLoading}>Annuler</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={e => {
+                  e.preventDefault()
+                  setIsLoading(true)
+                  onDelete()
+                    .then(() => {
+                      setIsDeleteDialogOpen(false)
+                      toast.success("Cours collectif supprimé avec succès")
+                    })
+                    .catch(err => {
+                      console.error("Erreur lors de la suppression:", err)
+                      toast.error("Erreur lors de la suppression du cours")
+                    })
+                    .finally(() => setIsLoading(false))
+                }}
+                disabled={isLoading}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isLoading ? "Suppression..." : "Supprimer"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
+  }
   
   // Détecter si c'est une absence/plage bloquée
   const isBlockedTime = appointment.status === "CANCELLED" && 

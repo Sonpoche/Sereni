@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageHeader } from "@/components/ui/page-header"
@@ -19,6 +20,8 @@ import { GroupClassDetails } from "@/components/appointments/group-class-details
 export default function CoursCollectifsPage() {
   const { data: session } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const selectedClassId = searchParams.get('id')
   const [loading, setLoading] = useState(true)
   const [groupClasses, setGroupClasses] = useState<any[]>([])
   const [clients, setClients] = useState<any[]>([])
@@ -41,6 +44,14 @@ export default function CoursCollectifsPage() {
         }
         const classesData = await classesResponse.json()
         setGroupClasses(classesData)
+        
+        // Si un ID est fourni dans l'URL, sélectionner automatiquement ce cours
+        if (selectedClassId && classesData.length > 0) {
+          const foundClass = classesData.find((c: any) => c.id === selectedClassId)
+          if (foundClass) {
+            setSelectedClass(foundClass)
+          }
+        }
         
         // Charger les clients
         const clientsResponse = await fetch(`/api/users/${session.user.id}/clients`)
@@ -68,7 +79,7 @@ export default function CoursCollectifsPage() {
     }
     
     fetchData()
-  }, [session?.user?.id])
+  }, [session?.user?.id, selectedClassId])
   
   // Créer un nouveau cours collectif
   const handleCreateGroupClass = async (data: any) => {
