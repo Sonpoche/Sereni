@@ -1,7 +1,7 @@
 // src/components/appointments/appointment-form.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -21,9 +21,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -40,7 +40,7 @@ import { RecurrenceForm } from "./recurrence-form"
 import { useSession } from "next-auth/react"
 
 const appointmentSchema = z.object({
-  clientId: z.string().min(1, "Client requis").optional().or(z.literal('')),
+  clientId: z.string().optional().or(z.literal('')),
   serviceId: z.string().min(1, "Service requis"),
   date: z.string().min(1, "Date requise"),
   startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format d'heure invalide (HH:MM)"),
@@ -56,25 +56,32 @@ const appointmentSchema = z.object({
     endDate: z.string().optional(),
   }).optional().default({
     enabled: false,
+    type: "WEEKLY",
+    weekdays: [],
     endType: "never",
   }),
   isGroupClass: z.boolean().default(false),
   maxParticipants: z.number().min(2).optional(),
 })
-  .refine(
-    (data) => {
-      // Si c'est un cours collectif, maxParticipants est obligatoire
-      if (data.isGroupClass) {
-        return !!data.maxParticipants && data.maxParticipants >= 2;
-      }
-      // Si ce n'est pas un cours collectif, clientId est obligatoire
-      return !!data.clientId;
-    },
-    {
-      message: "Champ obligatoire",
-      path: ["clientId"], // Le champ où l'erreur doit être affichée
-    }
-  );
+.superRefine((data, ctx) => {
+  // Si c'est un cours collectif, clientId n'est pas obligatoire
+  if (!data.isGroupClass && !data.clientId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Client requis pour un rendez-vous individuel",
+      path: ["clientId"],
+    });
+  }
+  
+  // Si c'est un cours collectif, maxParticipants est obligatoire
+  if (data.isGroupClass && (!data.maxParticipants || data.maxParticipants < 2)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Nombre de participants requis pour un cours collectif",
+      path: ["maxParticipants"],
+    });
+  }
+});
 
 type AppointmentFormValues = z.infer<typeof appointmentSchema>
 
@@ -101,44 +108,45 @@ export function AppointmentForm({
   const [selectedService, setSelectedService] = useState<any>(null)
   const { data: session } = useSession()
   
+  // Calculer les valeurs par défaut une seule fois
+  const initialValues = useMemo(() => ({
+    clientId: "",
+    serviceId: "",
+    date: new Date().toISOString().split('T')[0],
+    startTime: "09:00",
+    notes: "",
+    recurrence: {
+      enabled: false,
+      type: "WEEKLY" as const,
+      weekdays: [] as string[],
+      endType: "never" as const,
+    },
+    isGroupClass: false,
+    maxParticipants: 10,
+    ...defaultValues // Fusionner avec les valeurs fournies
+  }), [defaultValues]); // Dépendance seulement sur defaultValues
+  
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
-    defaultValues: defaultValues || {
-      clientId: "",
-      serviceId: "",
-      date: new Date().toISOString().split('T')[0],
-      startTime: "09:00",
-      notes: "",
-      recurrence: {
-        enabled: false,
-        endType: "never",
-      },
-      isGroupClass: false,
-    },
-  })
+    defaultValues: initialValues
+  });
+  
+  // Réinitialiser le formulaire seulement quand l'état "open" change
+  useEffect(() => {
+    if (open) {
+      // Assurons-nous que isGroupClass est correctement défini
+      const isGroup = defaultValues?.isGroupClass === true;
+      form.reset({
+        ...initialValues,
+        isGroupClass: isGroup
+      });
+    }
+  }, [open, form, initialValues, defaultValues]);
   
   // Mettre à jour les clients locaux quand les props clients changent
   useEffect(() => {
     setLocalClients(clients)
   }, [clients])
-  
-  // Reset form when opened/closed or defaultValues change
-  useEffect(() => {
-    if (open) {
-      form.reset(defaultValues || {
-        clientId: "",
-        serviceId: "",
-        date: new Date().toISOString().split('T')[0],
-        startTime: "09:00",
-        notes: "",
-        recurrence: {
-          enabled: false,
-          endType: "never",
-        },
-        isGroupClass: false,
-      })
-    }
-  }, [open, defaultValues, form])
   
   // Observer les changements de service
   useEffect(() => {
@@ -163,6 +171,7 @@ export function AppointmentForm({
   const handleSubmit = async (data: AppointmentFormValues) => {
     setIsSubmitting(true)
     try {
+      console.log("Données du formulaire soumises:", data);
       await onSubmit(data)
       onOpenChange(false)
     } catch (error: any) {
@@ -280,9 +289,8 @@ export function AppointmentForm({
                         type="number"
                         min="2"
                         max={selectedService?.maxParticipants || 30}
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        value={field.value || selectedService?.maxParticipants || 10}
+                        onChange={(e) => field.onChange(parseInt(e.target.value) || 10)}
+                        value={field.value || (selectedService?.maxParticipants || 10)}
                       />
                     </FormControl>
                     <FormMessage />

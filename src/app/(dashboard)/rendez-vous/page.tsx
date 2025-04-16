@@ -157,90 +157,99 @@ export default function RendezVousPage() {
   // Gestion des formulaires
   const handleAppointmentSubmit = async (data: any) => {
     try {
-      const isUpdate = selectedAppointment !== null
-      const url = isUpdate 
-        ? `/api/users/${session?.user?.id}/appointments/${selectedAppointment.id}`
-        : `/api/users/${session?.user?.id}/appointments`
+      // Cloner les données pour éviter de modifier l'original
+      const formData = { ...data };
       
-      const method = isUpdate ? "PATCH" : "POST"
-      
-      // Gérer la récurrence si activée
-      const hasRecurrence = !isUpdate && data.recurrence && data.recurrence.enabled
-      
-      // Supprimer les données de récurrence si c'est une mise à jour ou si elle n'est pas activée
-      if (isUpdate || !hasRecurrence) {
-        delete data.recurrence
-      }
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      })
-
-      // Vérifier le statut HTTP
-      if (!response.ok) {
-        const errorData = await response.json();
+      // Vérifier si c'est un cours collectif
+      if (formData.isGroupClass) {
+        console.log("Création d'un cours collectif avec les données:", formData);
         
-        // Cas spécifique pour les conflits (status 409)
-        if (response.status === 409) {
-          const error = new Error(errorData.message || "Ce créneau chevauche un rendez-vous existant");
-          // @ts-ignore - Ajout de propriétés personnalisées
-          error.status = 409;
-          error.message = errorData.message;
-          throw error;
-        }
+        // Préparer les données spécifiquement pour l'API des cours collectifs
+        const groupClassData = {
+          serviceId: formData.serviceId,
+          date: formData.date,
+          startTime: formData.startTime,
+          maxParticipants: Number(formData.maxParticipants) || 10,
+          notes: formData.notes || "",
+          isGroupClass: true
+        };
         
-        throw new Error(errorData.error || `Erreur lors de ${isUpdate ? 'la mise à jour' : 'la création'} du rendez-vous`);
-      }
-
-      const appointmentData = await response.json();
-      
-      // Traiter la récurrence si nécessaire
-      if (hasRecurrence && appointmentData.id) {
-        try {
-          const recurrenceResponse = await fetch(`/api/users/${session?.user?.id}/appointments/recurrence`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              originalBookingId: appointmentData.id,
-              type: data.recurrence.type,
-              weekdays: data.recurrence.weekdays || [],
-              monthDay: data.recurrence.monthDay,
-              endType: data.recurrence.endType,
-              endAfter: data.recurrence.endAfter,
-              endDate: data.recurrence.endDate,
-            }),
-          });
+        console.log("Données formatées pour l'API des cours collectifs:", groupClassData);
+        
+        // Pour les cours collectifs, nous utilisons une API différente
+        const response = await fetch(`/api/users/${session?.user?.id}/group-classes`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(groupClassData),
+        });
+        
+        const responseData = await response.json();
+        
+        if (!response.ok) {
+          console.error("Erreur cours collectif:", responseData);
           
-          if (!recurrenceResponse.ok) {
-            const recurrenceError = await recurrenceResponse.json();
-            console.warn("Récurrence créée partiellement:", recurrenceError);
-            toast.info("Rendez-vous créé mais problème avec la récurrence");
-          } else {
-            toast.success("Rendez-vous récurrent créé avec succès");
+          if (response.status === 409) {
+            const error = new Error(responseData.message || "Conflit d'horaire");
+            // @ts-ignore
+            error.status = 409;
+            throw error;
           }
-        } catch (recurrenceError) {
-          console.error("Erreur lors de la création de la récurrence:", recurrenceError);
-          toast.info("Rendez-vous créé mais problème avec la récurrence");
+          
+          // Afficher les détails de validation si disponibles
+          if (responseData.details && Array.isArray(responseData.details)) {
+            console.error("Détails de validation:", responseData.details);
+            const errorMessages = responseData.details.map((err: any) => 
+              `${err.path.join('.')}: ${err.message}`
+            ).join(', ');
+            throw new Error(`Erreur de validation: ${errorMessages}`);
+          }
+          
+          throw new Error(responseData.error || "Erreur lors de la création du cours collectif");
         }
+        
+        console.log("Cours collectif créé:", responseData);
+        
+        await refreshAppointments();
+        setIsFormOpen(false);
+        toast.success("Cours collectif créé avec succès");
+        return Promise.resolve();
       } else {
-        toast.success(`Rendez-vous ${isUpdate ? 'mis à jour' : 'créé'} avec succès`);
+        // Rendez-vous normal - code inchangé
+        const response = await fetch(`/api/users/${session?.user?.id}/appointments`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          
+          if (response.status === 409) {
+            const error = new Error(errorData.message || "Ce créneau chevauche un rendez-vous existant");
+            // @ts-ignore
+            error.status = 409;
+            throw error;
+          }
+          
+          throw new Error(errorData.error || "Erreur lors de la création du rendez-vous");
+        }
+        
+        await refreshAppointments();
+        setIsFormOpen(false);
+        toast.success("Rendez-vous créé avec succès");
+        return Promise.resolve();
       }
-
-      await refreshAppointments();
-      setIsFormOpen(false);
-      setSelectedAppointment(null);
-      return Promise.resolve();
     } catch (error) {
-      console.error("Erreur:", error)
+      console.error("Erreur lors de l'enregistrement du rendez-vous:", error);
+      // Afficher l'erreur à l'utilisateur
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la création du rendez-vous");
       return Promise.reject(error);
     }
-  }
+  };
 
   // Gestion du blocage de plage horaire
   const handleBlockTimeSubmit = async (data: any) => {

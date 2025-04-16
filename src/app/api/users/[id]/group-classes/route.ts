@@ -1,17 +1,21 @@
 // src/app/api/users/[id]/group-classes/route.ts
-
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth/auth.config"
 import prisma from "@/lib/prisma/client"
+import { auth } from "@/lib/auth/auth.config"
 import { z } from "zod"
 import { BookingStatus } from "@prisma/client"
 
+// Schéma de validation simplifié
 const groupClassSchema = z.object({
   serviceId: z.string().min(1, "Service requis"),
   date: z.string().min(1, "Date requise"),
   startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format d'heure invalide (HH:MM)"),
-  maxParticipants: z.number().min(2, "Au moins 2 participants sont requis").max(50, "Maximum 50 participants"),
-  notes: z.string().optional(),
+  maxParticipants: z.number().min(2, "Au moins 2 participants sont requis").max(50, "Maximum 50 participants").optional(),
+  notes: z.string().optional().nullable(),
+  isGroupClass: z.boolean().optional(),
+  // Champs optionnels pour compatibilité avec le formulaire de rendez-vous
+  clientId: z.string().optional(),
+  recurrence: z.any().optional()
 })
 
 export async function GET(
@@ -94,13 +98,36 @@ export async function POST(
       )
     }
     
-    // Récupérer et valider les données
+    // Récupérer les données brutes
     const body = await request.json()
-    const validatedData = groupClassSchema.parse(body)
+    console.log("Données reçues pour création de cours collectif:", body)
+    
+    // Extraire les champs essentiels avec des valeurs par défaut
+    const serviceId = body.serviceId
+    const date = body.date
+    const startTime = body.startTime
+    const maxParticipants = Number(body.maxParticipants || 10)
+    const notes = body.notes || null
+    
+    // Vérifications basiques
+    if (!serviceId) {
+      return NextResponse.json({ error: "Service requis" }, { status: 400 })
+    }
+    
+    if (!date) {
+      return NextResponse.json({ error: "Date requise" }, { status: 400 })
+    }
+    
+    if (!startTime) {
+      return NextResponse.json({ error: "Heure de début requise" }, { status: 400 })
+    }
     
     // Récupérer le profil professionnel
     const professional = await prisma.professional.findUnique({
       where: { userId },
+      include: {
+        user: true
+      }
     })
     
     if (!professional) {
@@ -110,9 +137,9 @@ export async function POST(
       )
     }
     
-    // Récupérer le service pour vérifier s'il peut gérer des cours collectifs
+    // Récupérer le service pour connaître sa durée
     const service = await prisma.service.findUnique({
-      where: { id: validatedData.serviceId },
+      where: { id: serviceId },
     })
     
     if (!service) {
@@ -122,19 +149,22 @@ export async function POST(
       )
     }
     
+    // Vérifier que le service peut accueillir des groupes
+    if (service.maxParticipants <= 1) {
+      return NextResponse.json(
+        { error: "Ce service ne permet pas les cours collectifs" },
+        { status: 400 }
+      )
+    }
+    
     // Calculer les heures de début et de fin
-    const dateStr = validatedData.date
-    const startTimeStr = validatedData.startTime
-    
-    const startTime = new Date(`${dateStr}T${startTimeStr}:00`)
-    
-    // Calculer l'heure de fin en ajoutant la durée du service
-    const endTime = new Date(startTime)
-    endTime.setMinutes(endTime.getMinutes() + service.duration)
+    const startDateTime = new Date(`${date}T${startTime}:00`)
+    const endDateTime = new Date(startDateTime)
+    endDateTime.setMinutes(endDateTime.getMinutes() + service.duration)
     
     // Ajouter le temps tampon si configuré
     if (professional.bufferTime) {
-      endTime.setMinutes(endTime.getMinutes() + professional.bufferTime)
+      endDateTime.setMinutes(endDateTime.getMinutes() + professional.bufferTime)
     }
     
     // Vérifier s'il existe des rendez-vous qui chevauchent cette plage horaire
@@ -145,24 +175,24 @@ export async function POST(
           // Cas 1: Un rendez-vous existant commence pendant notre plage
           {
             startTime: {
-              gte: startTime,
-              lt: endTime
+              gte: startDateTime,
+              lt: endDateTime
             }
           },
           // Cas 2: Un rendez-vous existant se termine pendant notre plage
           {
             endTime: {
-              gt: startTime,
-              lte: endTime
+              gt: startDateTime,
+              lte: endDateTime
             }
           },
           // Cas 3: Un rendez-vous existant couvre entièrement notre plage
           {
             startTime: {
-              lte: startTime
+              lte: startDateTime
             },
             endTime: {
-              gte: endTime
+              gte: endDateTime
             }
           }
         ]
@@ -180,23 +210,47 @@ export async function POST(
       )
     }
     
-    // Créer le cours collectif (sans client initial)
+    // Trouver le premier client disponible ou en créer un factice si nécessaire
+    let clientId;
+    
+    // Chercher un client existant
+    const firstClient = await prisma.client.findFirst({
+      orderBy: { createdAt: 'asc' }
+    });
+    
+    if (firstClient) {
+      clientId = firstClient.id;
+    } else {
+      // Créer un client "placeholder" lié au professionnel lui-même
+      // Cela évite d'avoir un client "système" visible dans l'interface
+      const placeholder = await prisma.client.create({
+        data: {
+          userId: userId,
+          // Autres champs requis pour un client
+          preferredLanguage: "fr",
+        }
+      });
+      clientId = placeholder.id;
+    }
+    
+    // Créer le cours collectif
     const groupClass = await prisma.booking.create({
       data: {
-        startTime,
-        endTime,
+        startTime: startDateTime,
+        endTime: endDateTime,
         status: BookingStatus.CONFIRMED,
         paymentStatus: "PENDING",
-        notes: validatedData.notes || null,
-        serviceId: validatedData.serviceId,
-        clientId: professional.userId, // Associer le professionnel comme client temporaire
+        notes: notes,
+        serviceId: serviceId,
+        clientId: clientId,
         professionalId: professional.id,
         isGroupClass: true,
-        maxParticipants: validatedData.maxParticipants,
+        maxParticipants: maxParticipants,
         currentParticipants: 0
       },
       include: {
-        service: true
+        service: true,
+        groupParticipants: true
       }
     })
     
@@ -215,7 +269,7 @@ export async function POST(
     }
     
     return NextResponse.json(
-      { error: "Erreur interne du serveur" },
+      { error: "Erreur interne du serveur", details: String(error) },
       { status: 500 }
     )
   }

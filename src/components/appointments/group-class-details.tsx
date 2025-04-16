@@ -107,7 +107,7 @@ export function GroupClassDetails({
   
   // Filtrer les clients qui ne sont pas déjà inscrits
   const availableClients = clients.filter(client => 
-    !groupClass.groupParticipants.some((p: any) => p.clientId === client.id)
+    !groupClass.groupParticipants?.some((p: any) => p.clientId === client.id)
   )
   
   const isFull = groupClass.currentParticipants >= groupClass.maxParticipants
@@ -171,8 +171,8 @@ export function GroupClassDetails({
           
           {/* Liste des participants */}
           <div className="space-y-2 pt-2 border-t">
-            <h4 className="text-sm font-medium">Participants ({groupClass.groupParticipants.length})</h4>
-            {groupClass.groupParticipants.length === 0 ? (
+            <h4 className="text-sm font-medium">Participants ({groupClass.groupParticipants?.length || 0})</h4>
+            {!groupClass.groupParticipants || groupClass.groupParticipants.length === 0 ? (
               <p className="text-sm text-gray-500 italic">Aucun participant inscrit</p>
             ) : (
               <ul className="space-y-2">
@@ -261,7 +261,7 @@ export function GroupClassDetails({
             <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
             <AlertDialogDescription>
               Cette action est irréversible. Le cours collectif sera définitivement supprimé de votre agenda.
-              {groupClass.groupParticipants.length > 0 && (
+              {groupClass.groupParticipants && groupClass.groupParticipants.length > 0 && (
                 <strong className="block mt-2 text-red-600">
                   Attention : {groupClass.groupParticipants.length} participant(s) sont inscrits à ce cours.
                 </strong>

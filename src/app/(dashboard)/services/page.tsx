@@ -1,70 +1,51 @@
 // src/app/(dashboard)/services/page.tsx
-"use client"
-
-import { useState, useEffect } from "react"
-import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { Loader2, Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { auth } from "@/lib/auth/auth.config"
+import { redirect } from "next/navigation"
+import { Metadata } from "next"
 import ServicesManager from "@/components/services/services-manager"
+import prisma from "@/lib/prisma/client"
+import { PageHeader } from "@/components/ui/page-header"
 
-export default function ServicesPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [profileData, setProfileData] = useState<any>(null)
+export const metadata: Metadata = {
+  title: "Mes services | SereniBook",
+  description: "Gérez vos services et prestations",
+}
 
-  useEffect(() => {
-    // Redirection si non authentifié
-    if (status === "unauthenticated") {
-      router.push("/connexion")
-      return
-    }
-
-    // Récupération des données du profil de l'utilisateur connecté
-    const fetchProfileData = async () => {
-      if (status === "authenticated" && session.user.id) {
-        try {
-          const response = await fetch(`/api/users/${session.user.id}/profile`)
-          if (!response.ok) throw new Error("Erreur lors du chargement du profil")
-          
-          const data = await response.json()
-          setProfileData(data)
-        } catch (error) {
-          console.error("Erreur:", error)
-        } finally {
-          setLoading(false)
+export default async function ServicesPage() {
+  const session = await auth()
+  
+  if (!session) {
+    return redirect("/connexion")
+  }
+  
+  if (session.user.role !== "PROFESSIONAL") {
+    return redirect("/tableau-de-bord")
+  }
+  
+  // Récupérer les infos du profil pour les passer au composant
+  const profile = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      name: true,
+      professionalProfile: {
+        select: {
+          id: true,
         }
       }
     }
-
-    if (status === "authenticated") {
-      fetchProfileData()
-    } else if (status !== "loading") {
-      setLoading(false)
-    }
-  }, [session, status, router])
-
-  // Affichage pendant le chargement
-  if (loading || status === "loading") {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
+  })
+  
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-title font-medium">Gestion des services</h1>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Nouveau service
-        </Button>
-      </div>
+    <div className="container mx-auto py-8">
+      <PageHeader
+        title="Mes services"
+        description="Gérez les services que vous proposez à vos clients"
+      />
       
-      <ServicesManager profileData={profileData} />
+      <div className="mt-8">
+        <ServicesManager profileData={profile || {}} />
+      </div>
     </div>
   )
 }

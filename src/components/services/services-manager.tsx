@@ -3,25 +3,11 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Loader2, Plus, Edit, Trash2, Clock, Euro, Palette } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Loader2, Plus, Edit, Trash2, Clock, Euro, Users } from "lucide-react"
+import { ServiceForm } from "@/components/services/service-form"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,68 +18,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
+import { formatPrice } from "@/lib/utils"
 
-// Interface pour le service
-interface Service {
-  id: string;
-  name: string;
-  description?: string;
-  duration: number;
-  price: number;
-  color?: string;
-  maxParticipants?: number;
-  type?: string;
-  location?: string;
-  active: boolean;
-  professionalId: string;
-}
-
-// Interface pour les données du profil
-interface ProfileData {
-  id?: string;
-  name?: string;
-  professionalProfile?: {
-    id?: string;
-  };
-}
-
-const serviceSchema = z.object({
-  name: z.string().min(3, "Le nom du service doit contenir au moins 3 caractères"),
-  description: z.string().min(10, "La description doit contenir au moins 10 caractères"),
-  duration: z.number().min(5, "La durée minimum est de 5 minutes").max(480, "La durée maximum est de 8 heures"),
-  price: z.number().min(0, "Le prix ne peut pas être négatif"),
-  color: z.string().optional(),
-  maxParticipants: z.number().default(1),
-  type: z.string().optional(),
-  location: z.string().optional(),
-})
-
-type ServiceFormValues = z.infer<typeof serviceSchema>
-
-export default function ServicesManager({ profileData }: { profileData: ProfileData }) {
+export default function ServicesManager({ profileData }: { profileData: any }) {
   const { data: session } = useSession()
-  const [services, setServices] = useState<Service[]>([])
+  const [services, setServices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isFormOpen, setIsFormOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [currentServiceId, setCurrentServiceId] = useState<string | null>(null)
+  const [currentService, setCurrentService] = useState<any | null>(null)
   const [deleteServiceId, setDeleteServiceId] = useState<string | null>(null)
-
-  // Configuration du formulaire
-  const form = useForm<ServiceFormValues>({
-    resolver: zodResolver(serviceSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      duration: 60,
-      price: 0,
-      color: "#6746c3", // Couleur par défaut (lavande)
-      maxParticipants: 1,
-      type: "",
-      location: "",
-    }
-  })
 
   // Chargement des services
   useEffect(() => {
@@ -122,38 +58,35 @@ export default function ServicesManager({ profileData }: { profileData: ProfileD
   }, [session?.user?.id])
 
   // Pour l'édition d'un service existant
-  const editService = (service: Service) => {
-    setCurrentServiceId(service.id)
+  const editService = (service: any) => {
+    console.log("Service à modifier:", service); // Pour déboguer
     
-    // Remplir le formulaire avec les données du service
-    form.reset({
-      name: service.name,
+    // Préparer les valeurs par défaut pour le formulaire
+    const formValues = {
+      name: service.name || "",
       description: service.description || "",
-      duration: service.duration,
-      price: Number(service.price),
+      duration: service.duration, // Déjà un nombre
+      price: typeof service.price === 'string' ? parseFloat(service.price) : Number(service.price),
       color: service.color || "#6746c3",
-      maxParticipants: service.maxParticipants || 1,
-      type: service.type || "",
+      // Déterminer si c'est un service de groupe
+      isGroupService: service.maxParticipants > 1,
+      maxParticipants: service.maxParticipants > 1 ? service.maxParticipants : 10,
       location: service.location || "",
-    })
+    };
     
-    setIsDialogOpen(true)
+    console.log("Valeurs par défaut pour le formulaire:", formValues); // Pour déboguer
+    
+    // Stocker les valeurs du service
+    setCurrentService({...service, ...formValues});
+    
+    // Ouvrir le formulaire
+    setIsFormOpen(true);
   }
   
   // Pour la création d'un nouveau service
   const addNewService = () => {
-    setCurrentServiceId(null)
-    form.reset({
-      name: "",
-      description: "",
-      duration: 60,
-      price: 0,
-      color: "#6746c3",
-      maxParticipants: 1,
-      type: "",
-      location: "",
-    })
-    setIsDialogOpen(true)
+    setCurrentService(null)
+    setIsFormOpen(true)
   }
   
   // Pour la suppression d'un service
@@ -186,55 +119,85 @@ export default function ServicesManager({ profileData }: { profileData: ProfileD
     }
   }
 
-  // Soumission du formulaire
-  async function onSubmit(data: ServiceFormValues) {
-    setIsSubmitting(true)
+  // Soumission du formulaire avec débogage et gestion améliorée des erreurs
+  const handleSubmit = async (data: any) => {
+    setIsSubmitting(true);
     
     try {
-      const url = currentServiceId 
-        ? `/api/users/${session?.user?.id}/services/${currentServiceId}`
-        : `/api/users/${session?.user?.id}/services`
+      // Préparer les données pour l'API
+      const serviceData = {
+        name: data.name,
+        description: data.description,
+        duration: Number(data.duration),
+        price: Number(data.price),
+        color: data.color,
+        // Si c'est un service de groupe, utiliser maxParticipants, sinon 1
+        maxParticipants: data.isGroupService ? Number(data.maxParticipants) : 1,
+        location: data.location || null,
+      };
+      
+      console.log("Données envoyées à l'API:", serviceData);
+      
+      const url = currentService 
+        ? `/api/users/${session?.user?.id}/services/${currentService.id}`
+        : `/api/users/${session?.user?.id}/services`;
         
-      const method = currentServiceId ? "PATCH" : "POST"
+      const method = currentService ? "PATCH" : "POST";
       
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(data),
-      })
+        body: JSON.stringify(serviceData),
+      });
 
       if (!response.ok) {
-        throw new Error("Erreur lors de l'enregistrement du service")
+        // Récupérer le message d'erreur du serveur
+        const errorData = await response.json();
+        console.error("Erreur API:", errorData);
+        
+        // Afficher les détails de validation si disponibles
+        if (errorData.details && Array.isArray(errorData.details)) {
+          console.error("Détails de validation:", errorData.details);
+          
+          // Créer un message d'erreur plus informatif
+          const errorMessages = errorData.details.map((err: any) => 
+            `${err.path}: ${err.message}`
+          ).join(', ');
+          
+          toast.error(`Données invalides: ${errorMessages}`);
+          throw new Error(`Erreur de validation: ${errorMessages}`);
+        }
+        
+        throw new Error(errorData.error || `Erreur ${response.status}: ${response.statusText}`);
       }
 
-      const savedService = await response.json()
+      const savedService = await response.json();
       
       // Mettre à jour la liste des services
-      if (currentServiceId) {
+      if (currentService) {
         setServices(prevServices => 
           prevServices.map(service => 
-            service.id === currentServiceId ? savedService : service
+            service.id === currentService.id ? savedService : service
           )
-        )
-        toast.success("Service mis à jour avec succès")
+        );
+        toast.success("Service mis à jour avec succès");
       } else {
-        setServices(prevServices => [...prevServices, savedService])
-        toast.success("Service créé avec succès")
+        setServices(prevServices => [...prevServices, savedService]);
+        toast.success("Service créé avec succès");
       }
       
       // Fermer le dialogue et réinitialiser
-      setIsDialogOpen(false)
-      setCurrentServiceId(null)
-      form.reset()
+      setIsFormOpen(false);
+      setCurrentService(null);
     } catch (error) {
-      console.error("Erreur:", error)
-      toast.error("Erreur lors de l'enregistrement du service")
+      console.error("Erreur détaillée:", error);
+      toast.error(error instanceof Error ? error.message : "Erreur lors de l'enregistrement du service");
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -269,19 +232,31 @@ export default function ServicesManager({ profileData }: { profileData: ProfileD
               style={{ backgroundColor: service.color || '#6746c3' }}
             />
             <CardHeader>
-              <CardTitle className="flex justify-between">
-                <span>{service.name}</span>
-                <span className="text-xl">{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(Number(service.price))}</span>
-              </CardTitle>
+              <div className="flex justify-between items-start">
+                <CardTitle>{service.name}</CardTitle>
+                {service.maxParticipants > 1 && (
+                  <Badge variant="outline" className="ml-2">
+                    <Users className="h-3 w-3 mr-1" />
+                    Groupe ({service.maxParticipants})
+                  </Badge>
+                )}
+              </div>
               <CardDescription className="flex items-center gap-2">
                 <Clock className="h-4 w-4" /> 
                 {service.duration} minutes
+                <span className="mx-1">•</span>
+                <span>{formatPrice(Number(service.price))}</span>
               </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-600">
                 {service.description || "Aucune description"}
               </p>
+              {service.location && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Lieu: {service.location}
+                </p>
+              )}
             </CardContent>
             <CardFooter className="flex justify-end gap-2 border-t pt-4">
               <Button variant="outline" size="sm" onClick={() => editService(service)}>
@@ -296,44 +271,22 @@ export default function ServicesManager({ profileData }: { profileData: ProfileD
         ))}
       </div>
 
-      {/* Dialogue pour ajouter/modifier un service */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>{currentServiceId ? "Modifier le service" : "Ajouter un service"}</DialogTitle>
-            <DialogDescription>
-              {currentServiceId 
-                ? "Modifiez les détails de votre service ci-dessous." 
-                : "Créez un nouveau service à proposer à vos clients."}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {/* Formulaire similaire à celui de ServicesTab */}
-              {/* ... */}
-              
-              <DialogFooter className="mt-6">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  Annuler
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Enregistrement...
-                    </>
-                  ) : currentServiceId ? "Mettre à jour" : "Créer le service"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      {/* Formulaire de service */}
+      <ServiceForm
+        open={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        onSubmit={handleSubmit}
+        defaultValues={currentService ? {
+          name: currentService.name,
+          description: currentService.description || "",
+          duration: currentService.duration,
+          price: Number(currentService.price),
+          color: currentService.color || "#6746c3",
+          isGroupService: currentService.isGroupService,
+          maxParticipants: currentService.maxParticipants > 1 ? currentService.maxParticipants : 10,
+          location: currentService.location || "",
+        } : undefined}
+      />
       
       {/* Dialogue de confirmation de suppression */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
@@ -341,16 +294,17 @@ export default function ServicesManager({ profileData }: { profileData: ProfileD
           <AlertDialogHeader>
             <AlertDialogTitle>Êtes-vous sûr de vouloir supprimer ce service ?</AlertDialogTitle>
             <AlertDialogDescription>
-              Cette action est irréversible. Le service sera définitivement supprimé.
+              Cette action est irréversible. Le service sera définitivement supprimé de votre agenda.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogCancel disabled={isSubmitting}>Annuler</AlertDialogCancel>
             <AlertDialogAction 
               onClick={deleteService}
-              className="bg-red-500 hover:bg-red-600 text-white"
+              disabled={isSubmitting}
+              className="bg-red-600 hover:bg-red-700"
             >
-              Supprimer
+              {isSubmitting ? "Suppression..." : "Supprimer"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

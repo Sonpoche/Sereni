@@ -11,9 +11,8 @@ const serviceSchema = z.object({
   duration: z.number().min(5, "La durée minimum est de 5 minutes").max(480, "La durée maximum est de 8 heures"),
   price: z.number().min(0, "Le prix ne peut pas être négatif"),
   color: z.string().optional(),
-  maxParticipants: z.number().default(1),
-  type: z.string().optional(),
-  location: z.string().optional(),
+  maxParticipants: z.number().int().min(1, "Au moins 1 participant est requis"),
+  location: z.string().optional().nullable(),
 })
 
 export async function PATCH(
@@ -34,48 +33,77 @@ export async function PATCH(
     
     // Récupérer et valider les données
     const body = await request.json()
-    const validatedData = serviceSchema.parse(body)
+    console.log("Données brutes de modification:", body)
     
-    // Récupérer le profil professionnel
-    const professional = await prisma.professional.findUnique({
-      where: { userId },
-    })
-    
-    if (!professional) {
-      return NextResponse.json(
-        { error: "Profil professionnel non trouvé" },
-        { status: 404 }
-      )
-    }
-    
-    // Vérifier que le service appartient au praticien
-    const existingService = await prisma.service.findUnique({
-      where: { id: serviceId },
-    })
-    
-    if (!existingService || existingService.professionalId !== professional.id) {
-      return NextResponse.json(
-        { error: "Service non trouvé ou non autorisé" },
-        { status: 404 }
-      )
-    }
-    
-    // Mettre à jour le service
-    const updatedService = await prisma.service.update({
-      where: { id: serviceId },
-      data: {
-        name: validatedData.name,
-        description: validatedData.description,
-        duration: validatedData.duration,
-        price: validatedData.price,
-        color: validatedData.color,
-        maxParticipants: validatedData.maxParticipants,
-        type: validatedData.type || null,
-        location: validatedData.location || null,
+    try {
+      // S'assurer que tous les champs numériques sont bien des nombres
+      const preparedData = {
+        ...body,
+        duration: typeof body.duration === 'string' ? parseInt(body.duration) : body.duration,
+        price: typeof body.price === 'string' ? parseFloat(body.price) : body.price,
+        maxParticipants: typeof body.maxParticipants === 'string' ? 
+          parseInt(body.maxParticipants) : 
+          body.maxParticipants,
+        // Convertir null en chaîne vide si nécessaire
+        location: body.location === null ? "" : body.location
+      };
+      
+      console.log("Données préparées pour validation:", preparedData);
+      
+      const validatedData = serviceSchema.parse(preparedData);
+      console.log("Données validées:", validatedData);
+      
+      // Récupérer le profil professionnel
+      const professional = await prisma.professional.findUnique({
+        where: { userId },
+      })
+      
+      if (!professional) {
+        return NextResponse.json(
+          { error: "Profil professionnel non trouvé" },
+          { status: 404 }
+        )
       }
-    })
-    
-    return NextResponse.json(updatedService)
+      
+      // Vérifier que le service appartient au praticien
+      const existingService = await prisma.service.findUnique({
+        where: { id: serviceId },
+      })
+      
+      if (!existingService || existingService.professionalId !== professional.id) {
+        return NextResponse.json(
+          { error: "Service non trouvé ou non autorisé" },
+          { status: 404 }
+        )
+      }
+      
+      // Mettre à jour le service
+      const updatedService = await prisma.service.update({
+        where: { id: serviceId },
+        data: {
+          name: validatedData.name,
+          description: validatedData.description,
+          duration: validatedData.duration,
+          price: validatedData.price,
+          color: validatedData.color,
+          maxParticipants: validatedData.maxParticipants,
+          location: validatedData.location,
+        }
+      })
+      
+      return NextResponse.json(updatedService)
+    } catch (validationError) {
+      console.error("Erreur de validation PATCH:", validationError)
+      
+      if (validationError instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: "Données invalides", details: validationError.errors },
+          { status: 400 }
+        )
+      }
+      
+      throw validationError
+    }
   } catch (error) {
     console.error("Erreur dans PATCH /api/users/[id]/services/[serviceId]:", error)
     
