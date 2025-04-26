@@ -1,3 +1,5 @@
+// src/components/register/steps/personal-info.tsx (modification)
+
 "use client"
 
 import { useForm } from "react-hook-form"
@@ -27,6 +29,10 @@ import {
   Globe,
   FileText
 } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { useState, useEffect } from "react"
+import { toast } from "sonner"
+import { geocodeAddress } from "@/lib/utils/geocoding"
 
 // Schéma de validation mis à jour
 const personalInfoSchema = z.object({
@@ -78,6 +84,10 @@ export default function PersonalInfoForm({
   onBack,
   isLoading = false 
 }: PersonalInfoFormProps) {
+  const { data: session } = useSession();
+  const [localLoading, setLocalLoading] = useState(false);
+  const isProfessional = userType === UserRole.PROFESSIONAL;
+
   const form = useForm({
     resolver: zodResolver(personalInfoSchema),
     defaultValues: {
@@ -92,7 +102,69 @@ export default function PersonalInfoForm({
     }
   });
 
-  const isProfessional = userType === UserRole.PROFESSIONAL;
+  // Fonction pour géocoder l'adresse
+  const handleSubmitWithGeocoding = async (data: any) => {
+    if (!isProfessional) {
+      // Si c'est un client, pas besoin de géocodage
+      onSubmit(data);
+      return;
+    }
+
+    setLocalLoading(true);
+    
+    try {
+      // Construire l'adresse complète
+      const fullAddress = `${data.address}, ${data.postalCode} ${data.city}, France`;
+      
+      // Géocoder l'adresse
+      const coords = await geocodeAddress(fullAddress);
+      
+      if (!coords) {
+        toast.warning("Impossible de localiser précisément votre adresse sur la carte. Vous pourrez l'ajuster plus tard.");
+        // Continuer malgré l'erreur
+        onSubmit(data);
+        return;
+      }
+      
+      // Ajouter les coordonnées aux données
+      const dataWithCoords = {
+        ...data,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      };
+      
+      // Mettre à jour les coordonnées dans la base de données si l'utilisateur est déjà connecté
+      if (session?.user?.id) {
+        try {
+          await fetch(`/api/users/${session.user.id}/coordonnees`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              address: data.address,
+              city: data.city,
+              postalCode: data.postalCode,
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+            }),
+          });
+        } catch (error) {
+          console.warn("Erreur lors de la mise à jour des coordonnées:", error);
+          // Non bloquant, on continue
+        }
+      }
+      
+      // Soumettre les données
+      onSubmit(dataWithCoords);
+    } catch (error) {
+      console.error("Erreur lors du géocodage:", error);
+      // Continuer malgré l'erreur
+      onSubmit(data);
+    } finally {
+      setLocalLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-xl mx-auto">
@@ -108,12 +180,19 @@ export default function PersonalInfoForm({
       <ConseilBox className="mb-8">
         Ces informations resteront confidentielles et ne seront utilisées que pour 
         améliorer votre expérience sur SereniBook.
+        {isProfessional && (
+          <>
+            <br />
+            <br />
+            Votre adresse permettra aux clients de vous trouver lors des recherches par localisation.
+          </>
+        )}
       </ConseilBox>
 
       {/* Container principal avec bordure verte */}
       <div className="bg-white border border-primary/20 rounded-xl p-8">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(handleSubmitWithGeocoding)} className="space-y-6">
             {/* Chaque FormItem aura un fond vert très léger */}
             <FormField
               control={form.control}
@@ -127,7 +206,7 @@ export default function PersonalInfoForm({
                     <Input 
                       placeholder="Jean Dupont"
                       className="h-11 bg-white"
-                      disabled={isLoading}
+                      disabled={isLoading || localLoading}
                       {...field} 
                     />
                   </FormControl>
@@ -148,7 +227,7 @@ export default function PersonalInfoForm({
                     <Input
                       placeholder="06 12 34 56 78"
                       className="h-11 bg-white"
-                      disabled={isLoading}
+                      disabled={isLoading || localLoading}
                       {...field}
                     />
                   </FormControl>
@@ -169,7 +248,7 @@ export default function PersonalInfoForm({
                     <Input
                       placeholder="123 rue de la Paix"
                       className="h-11 bg-white"
-                      disabled={isLoading}
+                      disabled={isLoading || localLoading}
                       {...field}
                     />
                   </FormControl>
@@ -191,7 +270,7 @@ export default function PersonalInfoForm({
                       <Input
                         placeholder="Paris"
                         className="h-11 bg-white"
-                        disabled={isLoading}
+                        disabled={isLoading || localLoading}
                         {...field}
                       />
                     </FormControl>
@@ -212,7 +291,7 @@ export default function PersonalInfoForm({
                       <Input
                         placeholder="75001"
                         className="h-11 bg-white"
-                        disabled={isLoading}
+                        disabled={isLoading || localLoading}
                         {...field}
                       />
                     </FormControl>
@@ -237,7 +316,7 @@ export default function PersonalInfoForm({
                         <Input
                           placeholder="Ma Société"
                           className="h-11 bg-white"
-                          disabled={isLoading}
+                          disabled={isLoading || localLoading}
                           {...field}
                         />
                       </FormControl>
@@ -259,7 +338,7 @@ export default function PersonalInfoForm({
                         <Input
                           placeholder="12345678901234"
                           className="h-11 bg-white"
-                          disabled={isLoading}
+                          disabled={isLoading || localLoading}
                           {...field}
                         />
                       </FormControl>
@@ -281,7 +360,7 @@ export default function PersonalInfoForm({
                         <Input
                           placeholder="https://monsite.com"
                           className="h-11 bg-white"
-                          disabled={isLoading}
+                          disabled={isLoading || localLoading}
                           {...field}
                         />
                       </FormControl>
@@ -297,17 +376,17 @@ export default function PersonalInfoForm({
                 type="button"
                 variant="outline"
                 onClick={onBack}
-                disabled={isLoading}
+                disabled={isLoading || localLoading}
               >
                 Retour
               </Button>
               <Button 
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || localLoading}
               >
-                {isLoading ? (
+                {isLoading || localLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="w-4 w-4 mr-2 animate-spin" />
                     Enregistrement...
                   </>
                 ) : (
