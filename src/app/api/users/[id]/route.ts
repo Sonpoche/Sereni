@@ -30,7 +30,7 @@ export async function GET(
     const headers = new Headers();
     headers.append('Cache-Control', 'no-store, max-age=0');
     
-    // Lecture utilisateur
+    // Lecture utilisateur avec les profils détaillés pour récupérer le téléphone
     console.log(`🟦 [API:${requestId}] Recherche utilisateur ${userId}`);
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -43,10 +43,16 @@ export async function GET(
         isFirstVisit: true,
         emailVerified: true,
         professionalProfile: {
-          select: { id: true }
+          select: { 
+            id: true,
+            phone: true  // Récupérer le téléphone du profil professionnel
+          }
         },
         clientProfile: {
-          select: { id: true }
+          select: { 
+            id: true,
+            phone: true  // Récupérer le téléphone du profil client
+          }
         }
       }
     })
@@ -59,13 +65,22 @@ export async function GET(
       )
     }
 
+    // Récupérer le téléphone depuis le bon profil selon le rôle
+    let phone = "";
+    if (user.professionalProfile?.phone) {
+      phone = user.professionalProfile.phone;
+    } else if (user.clientProfile?.phone) {
+      phone = user.clientProfile.phone;
+    }
+
     console.log(`🟦 [API:${requestId}] Données utilisateur récupérées:`, {
       id: user.id,
       hasProfile: user.hasProfile,
       isFirstVisit: user.isFirstVisit,
       emailVerified: user.emailVerified,
       hasProProfile: !!user.professionalProfile,
-      hasClientProfile: !!user.clientProfile
+      hasClientProfile: !!user.clientProfile,
+      phone: phone ? "présent" : "absent"
     })
 
     // Si nous vérifions spécifiquement l'email, retourner un résultat simplifié
@@ -78,8 +93,14 @@ export async function GET(
       }, { headers })
     }
 
+    // Retourner les données utilisateur avec le téléphone
+    const userData = {
+      ...user,
+      phone: phone  // Ajouter le téléphone au niveau racine
+    };
+
     console.log(`🟦 [API:${requestId}] Fin requête utilisateur ${userId}`);
-    return NextResponse.json(user, { headers })
+    return NextResponse.json(userData, { headers })
   } catch (error) {
     console.error(`🔴 [API:${requestId}] Erreur:`, error)
     return NextResponse.json(

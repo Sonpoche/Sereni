@@ -39,3 +39,33 @@ export function generateTimeSlots(
 
   return slots
 }
+
+export function formatServicePrice(price: any): string {
+  if (typeof price === 'number') {
+    return formatPrice(price);
+  }
+  
+  if (typeof price === 'string') {
+    // Essaie de convertir en nombre
+    const numPrice = parseFloat(price);
+    if (!isNaN(numPrice)) {
+      return formatPrice(numPrice);
+    }
+    return price + ' €';
+  }
+  
+  // Pour les autres types (comme Decimal de Prisma)
+  if (price && typeof price.toString === 'function') {
+    try {
+      const numPrice = parseFloat(price.toString());
+      if (!isNaN(numPrice)) {
+        return formatPrice(numPrice);
+      }
+      return price.toString() + ' €';
+    } catch (e) {
+      return price.toString() + ' €';
+    }
+  }
+  
+  return '0,00 €';
+}

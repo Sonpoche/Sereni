@@ -1,3 +1,4 @@
+// src/components/reservation/reservation-form.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -30,14 +31,27 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import { Loader2, CheckCircle } from "lucide-react"
+import { Loader2, CheckCircle, UserPlus } from "lucide-react"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { toast } from "sonner"
 import { useSession } from "next-auth/react"
+import { formatServicePrice } from "@/lib/utils"
+import Link from "next/link"
 
-// Simplification du schéma
-const reservationSchema = z.object({
+// Schéma pour l'étape 1 (plus souple)
+const step1Schema = z.object({
+  serviceId: z.string().min(1, "Veuillez sélectionner un service"),
+  date: z.string().min(1, "Veuillez sélectionner une date"),
+  timeSlot: z.string().min(1, "Veuillez sélectionner un horaire"),
+  name: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+// Schéma pour l'étape 2 (plus strict)
+const step2Schema = z.object({
   serviceId: z.string().min(1, "Veuillez sélectionner un service"),
   date: z.string().min(1, "Veuillez sélectionner une date"),
   timeSlot: z.string().min(1, "Veuillez sélectionner un horaire"),
@@ -47,7 +61,7 @@ const reservationSchema = z.object({
   notes: z.string().optional(),
 });
 
-type ReservationFormValues = z.infer<typeof reservationSchema>;
+type ReservationFormValues = z.infer<typeof step2Schema>;
 
 interface ReservationFormProps {
   professional: any;
@@ -62,35 +76,97 @@ export default function ReservationForm({
   isOpen,
   onClose,
 }: ReservationFormProps) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [step, setStep] = useState(1);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   
-  // Créer le formulaire avec React Hook Form et validation Zod
+  // Stocker les données de l'étape 1 séparément
+  const [step1Data, setStep1Data] = useState({
+    serviceId: "",
+    date: "",
+    timeSlot: ""
+  });
+  
+  // Stocker les données de l'étape 2 séparément
+  const [step2Data, setStep2Data] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    notes: ""
+  });
+  
+  // Créer le formulaire avec les bonnes valeurs selon l'étape
+  const getFormDefaultValues = () => {
+    if (step === 1) {
+      return {
+        serviceId: step1Data.serviceId || preselectedService?.id || "",
+        date: step1Data.date || "",
+        timeSlot: step1Data.timeSlot || "",
+        name: "",
+        email: "",
+        phone: "",
+        notes: "",
+      };
+    } else {
+      return {
+        serviceId: step1Data.serviceId,
+        date: step1Data.date,
+        timeSlot: step1Data.timeSlot,
+        name: step2Data.name,
+        email: step2Data.email,
+        phone: step2Data.phone,
+        notes: step2Data.notes,
+      };
+    }
+  };
+  
   const form = useForm<ReservationFormValues>({
-    resolver: zodResolver(reservationSchema),
-    defaultValues: {
-      serviceId: preselectedService?.id || "",
-      date: "",
-      timeSlot: "",
-      name: session?.user?.name || "",
-      email: session?.user?.email || "",
-      phone: "",
-      notes: "",
-    },
+    resolver: zodResolver(step === 1 ? step1Schema : step2Schema),
+    defaultValues: getFormDefaultValues(),
+    mode: "onChange"
   });
   
   // Récupérer les valeurs du formulaire en temps réel
   const watchServiceId = form.watch("serviceId");
   const watchDate = form.watch("date");
+  const watchTimeSlot = form.watch("timeSlot");
   
-  // Simuler des dates disponibles (à remplacer par une vraie API)
+  // Réinitialiser le formulaire quand l'étape change
+  useEffect(() => {
+    const newValues = getFormDefaultValues();
+    form.reset(newValues);
+    setFormKey(prev => prev + 1);
+  }, [step]);
+  
+  // Effet pour réinitialiser le formulaire quand la modal s'ouvre
+  useEffect(() => {
+    if (isOpen) {
+      setStep1Data({
+        serviceId: preselectedService?.id || "",
+        date: "",
+        timeSlot: ""
+      });
+      setStep2Data({
+        name: "",
+        email: "",
+        phone: "",
+        notes: ""
+      });
+      setStep(1);
+      setSuccess(false);
+      setShowLoginPrompt(false);
+      setFormKey(prev => prev + 1);
+    }
+  }, [isOpen, preselectedService]);
+  
+  // Charger les dates disponibles
   useEffect(() => {
     if (watchServiceId) {
-      // Générer des dates pour le mois en cours
       const today = new Date();
       const dates = [];
       
@@ -104,40 +180,130 @@ export default function ReservationForm({
     }
   }, [watchServiceId]);
   
-  // Simuler des horaires disponibles (à remplacer par une vraie API)
+  // Charger les horaires disponibles
   useEffect(() => {
     if (watchServiceId && watchDate) {
-      // Simuler différents horaires selon le jour de la semaine
-      const date = new Date(watchDate);
-      const dayOfWeek = date.getDay();
+      const fetchAvailableTimes = async () => {
+        try {
+          const response = await fetch(`/api/professionnels/${professional.user.id}/disponibilites?serviceId=${watchServiceId}&date=${watchDate}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.availableTimes && data.availableTimes.length > 0) {
+              setAvailableTimes(data.availableTimes);
+              return;
+            }
+          }
+          
+          // Fallback : simuler différents horaires selon le jour de la semaine
+          const date = new Date(watchDate);
+          const dayOfWeek = date.getDay();
+          
+          const times = dayOfWeek === 0 || dayOfWeek === 6
+            ? ['10:00', '11:00', '14:00', '15:00']
+            : ['09:00', '10:30', '14:00', '15:30', '17:00'];
+          
+          setAvailableTimes(times);
+          
+        } catch (error) {
+          console.error("Erreur lors du chargement des disponibilités:", error);
+          const defaultTimes = ['09:00', '10:30', '14:00', '15:30', '17:00'];
+          setAvailableTimes(defaultTimes);
+        }
+      };
       
-      // Horaires différents pour le weekend
-      const times = dayOfWeek === 0 || dayOfWeek === 6
-        ? ['10:00', '11:00', '14:00', '15:00']
-        : ['09:00', '10:30', '14:00', '15:30', '17:00'];
-      
-      setAvailableTimes(times);
+      fetchAvailableTimes();
     }
-  }, [watchServiceId, watchDate]);
+  }, [watchServiceId, watchDate, professional.user.id]);
+  
+  // Fonction pour passer à l'étape suivante
+const handleContinue = async () => {
+    // Récupérer les valeurs actuelles du formulaire
+    const currentValues = form.getValues();
+    
+    if (!currentValues.serviceId || !currentValues.date || !currentValues.timeSlot) {
+      toast.error("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
+    
+    // Sauvegarder les données de l'étape 1
+    setStep1Data({
+      serviceId: currentValues.serviceId,
+      date: currentValues.date,
+      timeSlot: currentValues.timeSlot
+    });
+    
+    // Si l'utilisateur n'est pas connecté, proposer de se connecter ou continuer
+    if (status === "unauthenticated") {
+      setShowLoginPrompt(true);
+      return;
+    }
+    
+    // Récupérer les informations complètes de l'utilisateur depuis la base de données
+    let userName = "";
+    let userEmail = session?.user?.email || "";
+    let userPhone = "";  // Nouveau : variable pour le téléphone
+    
+    if (session?.user?.id) {
+      try {
+        const response = await fetch(`/api/users/${session.user.id}`);
+        if (response.ok) {
+          const userData = await response.json();
+          // Récupérer toutes les données utilisateur
+          userName = userData.name || "";
+          userPhone = userData.phone || "";
+          console.log("Données utilisateur récupérées:", userData);
+        } else {
+          console.log("Erreur API utilisateur, utilisation des données de session");
+        }
+      } catch (error) {
+        console.error("Erreur lors de la récupération des données utilisateur:", error);
+      }
+    }
+    
+    // Si on n'a toujours pas de nom, utiliser ce qui est dans la session (même si vide)
+    if (!userName && session?.user) {
+      userName = session.user.name || "";
+    }
+    
+    // Préparer les données de l'étape 2 avec les infos utilisateur
+    setStep2Data({
+      name: userName,
+      email: userEmail,
+      phone: userPhone,
+      notes: ""
+    });
+    
+    setStep(2);
+  }
+  
+  // Fonction pour continuer sans se connecter
+  const handleContinueWithoutLogin = () => {
+    setShowLoginPrompt(false);
+    
+    // Préparer les données de l'étape 2 vides
+    setStep2Data({
+      name: "",
+      email: "",
+      phone: "",
+      notes: ""
+    });
+    
+    setStep(2);
+  }
   
   // Fonction pour soumettre le formulaire
   const onSubmit = async (data: ReservationFormValues) => {
-    setIsLoading(true);
+    // Si nous sommes à l'étape 1, on ne devrait pas arriver ici
+    if (step === 1) {
+      handleContinue();
+      return;
+    }
     
+    // Étape 2 : envoyer la réservation
     try {
-      // Si nous sommes à l'étape 1, passer à l'étape 2
-      if (step === 1) {
-        setStep(2);
-        setIsLoading(false);
-        return;
-      }
+      setIsLoading(true);
       
-      // Simuler un succès pour le moment
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setSuccess(true);
-      
-      // En production, décommenter pour envoyer la réservation
-      /*
       const response = await fetch(`/api/reservations`, {
         method: "POST",
         headers: {
@@ -145,9 +311,9 @@ export default function ReservationForm({
         },
         body: JSON.stringify({
           professionalId: professional.user.id,
-          serviceId: data.serviceId,
-          date: data.date,
-          startTime: data.timeSlot,
+          serviceId: step1Data.serviceId,
+          date: step1Data.date,
+          startTime: step1Data.timeSlot,
           name: data.name,
           email: data.email,
           phone: data.phone,
@@ -156,15 +322,16 @@ export default function ReservationForm({
       });
       
       if (!response.ok) {
-        throw new Error("Erreur lors de la réservation");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Erreur lors de la réservation");
       }
       
+      toast.success("Votre réservation a été enregistrée avec succès !");
       setSuccess(true);
-      */
       
     } catch (error) {
-      console.error("Erreur:", error);
-      toast.error("Erreur lors de la réservation. Veuillez réessayer.");
+      console.error("Erreur lors de la réservation:", error);
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la réservation. Veuillez réessayer.");
     } finally {
       setIsLoading(false);
     }
@@ -172,14 +339,31 @@ export default function ReservationForm({
   
   // Fonction pour gérer la fermeture du formulaire
   const handleClose = () => {
-    if (isLoading) return; // Empêcher la fermeture pendant le chargement
+    if (isLoading) return;
     
-    // Réinitialiser le formulaire
-    form.reset();
+    // Réinitialiser complètement le formulaire
+    setStep1Data({
+      serviceId: "",
+      date: "",
+      timeSlot: ""
+    });
+    setStep2Data({
+      name: "",
+      email: "",
+      phone: "",
+      notes: ""
+    });
     setStep(1);
     setSuccess(false);
+    setShowLoginPrompt(false);
+    setAvailableDates([]);
+    setAvailableTimes([]);
+    setFormKey(prev => prev + 1);
     onClose();
   };
+  
+  // Vérifier si tous les champs de l'étape 1 sont remplis
+  const isStep1Valid = !!watchServiceId && !!watchDate && !!watchTimeSlot;
   
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -188,14 +372,18 @@ export default function ReservationForm({
           <DialogTitle>
             {success 
               ? "Réservation confirmée" 
-              : `Réserver avec ${professional.user.name}`}
+              : showLoginPrompt 
+                ? "Se connecter ou continuer"
+                : `Réserver avec ${professional.user.name}`}
           </DialogTitle>
           <DialogDescription>
             {success 
               ? "Votre demande de réservation a été envoyée avec succès."
-              : step === 1 
-                ? "Choisissez un service et un créneau horaire."
-                : "Complétez vos informations personnelles pour finaliser la réservation."}
+              : showLoginPrompt
+                ? "Vous pouvez vous connecter pour pré-remplir vos informations ou continuer en tant qu'invité."
+                : step === 1 
+                  ? "Choisissez un service et un créneau horaire."
+                  : "Complétez vos informations personnelles pour finaliser la réservation."}
           </DialogDescription>
         </DialogHeader>
         
@@ -204,14 +392,48 @@ export default function ReservationForm({
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">Merci pour votre réservation !</h3>
             <p className="mb-6 text-sm text-gray-600">
-              Vous recevrez un email de confirmation à {form.getValues("email")}. 
+              Vous recevrez un email de confirmation à {step2Data.email}. 
               Le professionnel vous contactera pour confirmer votre rendez-vous.
             </p>
-            <Button onClick={handleClose}>Fermer</Button>
+            <Button onClick={handleClose} className="bg-lavender hover:bg-lavender/90 text-white border-none">
+              Fermer
+            </Button>
+          </div>
+        ) : showLoginPrompt ? (
+          <div className="py-6 text-center space-y-4">
+            <UserPlus className="h-16 w-16 text-lavender mx-auto mb-4" />
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Connectez-vous pour pré-remplir automatiquement vos informations ou continuez en tant qu'invité.
+              </p>
+              
+              <div className="flex flex-col gap-2">
+                <Button 
+                  onClick={handleClose}
+                  className="bg-lavender hover:bg-lavender/90 text-white border-none"
+                  asChild
+                >
+                  <Link href="/connexion">
+                    Se connecter
+                  </Link>
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  onClick={handleContinueWithoutLogin}
+                >
+                  Continuer en tant qu'invité
+                </Button>
+              </div>
+              
+              <p className="text-xs text-gray-500">
+                Pas encore de compte ? <Link href="/inscription" className="text-lavender hover:underline">Créer un compte</Link>
+              </p>
+            </div>
           </div>
         ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <Form {...form} key={formKey}>
+            <div className="space-y-4">
               {step === 1 ? (
                 <>
                   {/* Étape 1: Choix du service et de l'horaire */}
@@ -223,7 +445,7 @@ export default function ReservationForm({
                         <FormLabel>Service</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          value={field.value}
                           disabled={isLoading}
                         >
                           <FormControl>
@@ -232,9 +454,9 @@ export default function ReservationForm({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {professional.services.map((service: any) => (
+                            {professional.services && professional.services.map((service: any) => (
                               <SelectItem key={service.id} value={service.id}>
-                                {service.name} - {service.price.toFixed(2)}€ ({service.duration} min)
+                                {service.name} - {formatServicePrice(service.price)} ({service.duration} min)
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -253,7 +475,7 @@ export default function ReservationForm({
                           <FormLabel>Date</FormLabel>
                           <Select 
                             onValueChange={field.onChange} 
-                            defaultValue={field.value}
+                            value={field.value}
                             disabled={isLoading}
                           >
                             <FormControl>
@@ -284,7 +506,7 @@ export default function ReservationForm({
                           <FormLabel>Horaire</FormLabel>
                           <Select 
                             onValueChange={field.onChange} 
-                            defaultValue={field.value}
+                            value={field.value}
                             disabled={isLoading}
                           >
                             <FormControl>
@@ -316,7 +538,11 @@ export default function ReservationForm({
                       <FormItem>
                         <FormLabel>Nom complet</FormLabel>
                         <FormControl>
-                          <Input {...field} disabled={isLoading} />
+                          <Input 
+                            {...field} 
+                            disabled={isLoading}
+                            placeholder="Votre nom complet"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -330,7 +556,12 @@ export default function ReservationForm({
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input {...field} type="email" disabled={isLoading} />
+                          <Input 
+                            {...field} 
+                            type="email" 
+                            disabled={isLoading}
+                            placeholder="votre@email.com"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -344,7 +575,11 @@ export default function ReservationForm({
                       <FormItem>
                         <FormLabel>Téléphone</FormLabel>
                         <FormControl>
-                          <Input {...field} disabled={isLoading} />
+                          <Input 
+                            {...field} 
+                            disabled={isLoading}
+                            placeholder="06 12 34 56 78"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -384,19 +619,32 @@ export default function ReservationForm({
                   </Button>
                 )}
                 
-                <Button 
-                  type="submit" 
-                  disabled={isLoading || (step === 1 && (!watchServiceId || !watchDate || !form.getValues("timeSlot")))}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Chargement...
-                    </>
-                  ) : step === 1 ? "Continuer" : "Réserver"}
-                </Button>
+                {step === 1 ? (
+                  <Button 
+                    type="button" 
+                    onClick={handleContinue}
+                    disabled={isLoading || !isStep1Valid}
+                    className="bg-lavender hover:bg-lavender/90 text-white border-none"
+                  >
+                    Continuer
+                  </Button>
+                ) : (
+                  <Button 
+                    type="submit" 
+                    onClick={form.handleSubmit(onSubmit)}
+                    disabled={isLoading}
+                    className="bg-lavender hover:bg-lavender/90 text-white border-none"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Chargement...
+                      </>
+                    ) : "Réserver"}
+                  </Button>
+                )}
               </DialogFooter>
-            </form>
+            </div>
           </Form>
         )}
       </DialogContent>
