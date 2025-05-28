@@ -64,7 +64,7 @@ model User {
   hasProfile    Boolean   @default(false)
   accounts      Account[]
   sessions      Session[]
-  resetTokens   ResetToken[] // Ajout de la relation
+  resetTokens   ResetToken[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -112,7 +112,7 @@ model Professional {
   id              String    @id @default(cuid())
   userId          String    @unique
   type            ProfessionalType
-  otherTypeDetails String?   // Ajout de ce champ
+  otherTypeDetails String?
   specialties     String[]
   description     String?   @db.Text
   phone           String?
@@ -132,7 +132,11 @@ model Professional {
   allowedBookingWindow Int   @default(30)
   cancelationWindow    Int   @default(24)
   autoConfirmBookings  Boolean @default(false)
-  bufferTime           Int   @default(0)  // Nouveau champ pour le temps de préparation en minutes
+  bufferTime           Int   @default(0)
+  
+  // Coordonnées géographiques
+  latitude        Float?
+  longitude       Float?
   
   // Relations avec suppression en cascade
   user            User      @relation("UserToProfessional", fields: [userId], references: [id], onDelete: Cascade)
@@ -146,10 +150,9 @@ model Professional {
   notifications   NotificationSettings? @relation("ProfessionalToNotifications")
   invitations   InvitationToken[]
   clients         ProfessionalClient[]
-
-  // Ajout des coordonnées géographiques
-  latitude        Float?
-  longitude       Float?
+  
+  // NOUVEAU SYSTÈME : Cours collectifs
+  groupClasses    GroupClass[] @relation("ProfessionalToGroupClass")
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -182,6 +185,12 @@ model Client {
   notes         String?   @db.Text
   preferredLanguage String @default("fr")
 
+  // Préférences de géolocalisation
+  maxDistance     Int?      @default(25)
+  showOnlineCourses Boolean @default(true)
+  latitude        Float?
+  longitude       Float?
+
   // Relations avec suppression en cascade
   user          User      @relation("UserToClient", fields: [userId], references: [id], onDelete: Cascade)
   bookings      Booking[] @relation("ClientToBooking")
@@ -189,14 +198,93 @@ model Client {
   reviews       Review[]  @relation("ClientToReview")
   invoices      Invoice[] @relation("ClientToInvoice")
   professionals   ProfessionalClient[]
-
-  // Ajout de la relation manquante
+  
+  // ANCIEN SYSTÈME (à supprimer plus tard)
   groupParticipations GroupParticipant[]
+  
+  // NOUVEAU SYSTÈME : Inscriptions aux cours collectifs
+  groupRegistrations GroupRegistration[] @relation("ClientToGroupRegistration")
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
 
+// ==========================================
+// NOUVEAU SYSTÈME : COURS COLLECTIFS
+// ==========================================
+
+// Cours collectifs (indépendants des services)
+model GroupClass {
+  id              String    @id @default(cuid())
+  name            String    // "Yoga du matin", "Pilates débutant"
+  description     String?   @db.Text
+  price           Decimal   @db.Decimal(10,2)
+  duration        Int       // durée en minutes
+  maxParticipants Int
+  professionalId  String
+  active          Boolean   @default(true)
+  
+  // Localisation du cours
+  address         String?   // Adresse complète du cours
+  city            String?   // Ville du cours
+  postalCode      String?   // Code postal du cours
+  latitude        Float?    // Coordonnées GPS
+  longitude       Float?    // Coordonnées GPS
+  isOnline        Boolean   @default(false) // Cours en ligne
+  
+  // Informations pratiques
+  equipment       String[]  @default([]) // Matériel requis
+  level           String?   // "DEBUTANT", "INTERMEDIAIRE", "AVANCE", "TOUS_NIVEAUX"
+  category        String?   // "YOGA", "PILATES", "FITNESS", "MEDITATION", etc.
+  
+  professional    Professional @relation("ProfessionalToGroupClass", fields: [professionalId], references: [id], onDelete: Cascade)
+  sessions        GroupSession[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Sessions/séances d'un cours collectif
+model GroupSession {
+  id              String    @id @default(cuid())
+  groupClassId    String
+  startTime       DateTime
+  endTime         DateTime
+  status          String    @default("SCHEDULED") // SCHEDULED, CANCELLED, COMPLETED
+  notes           String?   @db.Text
+  currentParticipants Int @default(0)
+  
+  // Pour la récurrence
+  isRecurring     Boolean   @default(false)
+  recurrenceRule  String?   // JSON avec les règles de récurrence
+  
+  groupClass      GroupClass @relation(fields: [groupClassId], references: [id], onDelete: Cascade)
+  registrations   GroupRegistration[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Inscriptions aux séances
+model GroupRegistration {
+  id              String    @id @default(cuid())
+  sessionId       String
+  clientId        String
+  status          String    @default("REGISTERED") // REGISTERED, CANCELLED, ATTENDED, NO_SHOW
+  paymentStatus   String    @default("PENDING")
+  registeredAt    DateTime  @default(now())
+  
+  session         GroupSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  client          Client    @relation("ClientToGroupRegistration", fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@unique([sessionId, clientId])
+}
+
+// ==========================================
+// SYSTÈME EXISTANT : RENDEZ-VOUS INDIVIDUELS
+// ==========================================
+
+// Services pour rendez-vous individuels uniquement
 model Service {
   id              String    @id @default(cuid())
   name            String
@@ -205,12 +293,12 @@ model Service {
   price           Decimal   @db.Decimal(10,2)
   type            String?
   color           String?
-  maxParticipants Int      @default(1)
   location        String?
   professionalId  String
   active          Boolean   @default(true)
   
-  // Relations avec suppression en cascade
+  // SUPPRIMÉ : maxParticipants (plus nécessaire, les services sont pour l'individuel uniquement)
+  
   professional    Professional @relation("ProfessionalToService", fields: [professionalId], references: [id], onDelete: Cascade)
   bookings        Booking[]    @relation("ServiceToBooking")
 
@@ -218,6 +306,7 @@ model Service {
   updatedAt       DateTime  @updatedAt
 }
 
+// Réservations pour rendez-vous individuels
 model Booking {
   id                String    @id @default(cuid())
   startTime         DateTime
@@ -227,7 +316,6 @@ model Booking {
   notes             String?   @db.Text
   cancellationReason String?  @db.Text
   
-  // Relations avec suppression en cascade
   serviceId       String
   service         Service   @relation("ServiceToBooking", fields: [serviceId], references: [id], onDelete: Cascade)
   clientId        String
@@ -241,20 +329,18 @@ model Booking {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  // Champs pour les cours collectifs
+  // ANCIEN SYSTÈME À SUPPRIMER (remplacé par GroupClass)
   isGroupClass     Boolean        @default(false)
   maxParticipants  Int            @default(1)
   currentParticipants Int         @default(1)
   groupParticipants GroupParticipant[]
 
-
-    // Champs pour la récurrence
+  // Champs pour la récurrence (à garder pour les RDV individuels)
   isRecurring       Boolean       @default(false)
   recurrenceRule    RecurrenceRule? @relation("BookingToRecurrenceRule")
   parentBookingId   String?
   parentRecurrenceId String?
   recurrenceOccurrences RecurrenceRule? @relation("RecurrenceRuleToOccurrences", fields: [parentRecurrenceId], references: [id], onDelete: SetNull)
-
 }
 
 model Availability {
@@ -264,7 +350,6 @@ model Availability {
   endTime         String    // format "HH:mm"
   professionalId  String
   
-  // Relations avec suppression en cascade
   professional    Professional @relation("ProfessionalToAvailability", fields: [professionalId], references: [id], onDelete: Cascade)
 
   @@unique([professionalId, dayOfWeek, startTime, endTime])
@@ -279,13 +364,11 @@ model Website {
   seoTitle        String?
   seoDescription  String?   @db.Text
   
-  // Contenus personnalisables
   welcomeText     String?   @db.Text
   aboutText       String?   @db.Text
   servicesText    String?   @db.Text
   contactText     String?   @db.Text
   
-  // Relations avec suppression en cascade
   professional    Professional @relation("ProfessionalToWebsite", fields: [professionalId], references: [id], onDelete: Cascade)
 
   createdAt       DateTime  @default(now())
@@ -299,7 +382,6 @@ model Review {
   response        String?   @db.Text
   visible         Boolean   @default(true)
   
-  // Relations avec suppression en cascade
   clientId        String
   client          Client    @relation("ClientToReview", fields: [clientId], references: [id], onDelete: Cascade)
   professionalId  String
@@ -328,7 +410,6 @@ model Invoice {
   paymentRef      String?
   notes           String?   @db.Text
   
-  // Relations avec suppression en cascade
   client          Client     @relation("ClientToInvoice", fields: [clientId], references: [id], onDelete: Cascade)
   professional    Professional @relation("ProfessionalToInvoice", fields: [professionalId], references: [id], onDelete: Cascade)
   bookings        Booking[]  @relation("BookingToInvoice")
@@ -346,7 +427,6 @@ model InvoiceItem {
   unitPrice       Decimal   @db.Decimal(10,2)
   totalPrice      Decimal   @db.Decimal(10,2)
   
-  // Relations avec suppression en cascade
   invoice         Invoice   @relation("InvoiceToItems", fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 
@@ -363,7 +443,6 @@ model InvoiceSettings {
   logoUrl         String?
   nextInvoiceNumber Int     @default(1)
   
-  // Relations avec suppression en cascade
   professional    Professional @relation("ProfessionalToInvoiceSettings", fields: [professionalId], references: [id], onDelete: Cascade)
 }
 
@@ -378,7 +457,6 @@ model NotificationSettings {
   marketingEmails      Boolean   @default(false)
   reminderHours        Int       @default(24)
   
-  // Relations avec suppression en cascade
   professional    Professional @relation("ProfessionalToNotifications", fields: [professionalId], references: [id], onDelete: Cascade)
 }
 
@@ -392,7 +470,6 @@ model ClientPackage {
   validFrom         DateTime  @default(now())
   validUntil        DateTime?
   
-  // Relations avec suppression en cascade
   client            Client    @relation("ClientToPackage", fields: [clientId], references: [id], onDelete: Cascade)
 
   createdAt         DateTime  @default(now())
@@ -411,7 +488,6 @@ model ProfessionalClient {
   @@unique([professionalId, clientId])
 }
 
-
 enum RecurrenceType {
   NONE
   DAILY
@@ -420,18 +496,17 @@ enum RecurrenceType {
   MONTHLY
 }
 
-// Ajouter un nouveau modèle pour les règles de récurrence
+// Pour la récurrence des RDV individuels
 model RecurrenceRule {
   id              String          @id @default(cuid())
   bookingId       String          @unique
   type            RecurrenceType
-  interval        Int             @default(1)  // Par exemple 1 pour toutes les semaines, 2 pour toutes les deux semaines
-  weekdays        Int[]           // Jours de la semaine (0-6) pour le type WEEKLY
-  monthDay        Int?            // Jour du mois pour le type MONTHLY
+  interval        Int             @default(1)
+  weekdays        Int[]
+  monthDay        Int?
   endDate         DateTime?
-  endAfter        Int?            // Nombre d'occurrences
+  endAfter        Int?
   
-  // Relations
   booking         Booking         @relation("BookingToRecurrenceRule", fields: [bookingId], references: [id], onDelete: Cascade)
   occurrences     Booking[]       @relation("RecurrenceRuleToOccurrences")
   
@@ -439,7 +514,11 @@ model RecurrenceRule {
   updatedAt       DateTime        @updatedAt
 }
 
-// Nouveau modèle pour gérer les participants aux cours collectifs
+// ==========================================
+// ANCIEN SYSTÈME À SUPPRIMER PLUS TARD
+// ==========================================
+
+// ANCIEN - Participants aux cours collectifs via Booking
 model GroupParticipant {
   id              String    @id @default(cuid())
   bookingId       String
@@ -447,7 +526,6 @@ model GroupParticipant {
   status          BookingStatus @default(PENDING)
   createdAt       DateTime  @default(now())
   
-  // Relations
   booking         Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   

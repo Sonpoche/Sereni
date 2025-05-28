@@ -1,274 +1,273 @@
 // src/app/(dashboard)/tableau-de-bord/page.tsx
-"use client"
-
-import { useEffect, useState, useRef } from "react"
-import { useSession } from "next-auth/react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { motion, AnimatePresence } from "framer-motion"
+import { auth } from "@/lib/auth/auth.config"
+import { redirect } from "next/navigation"
 import { UserRole } from "@prisma/client"
+import { PageHeader } from "@/components/ui/page-header"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { 
-  AlertCircle, 
-  Loader2, 
   Calendar, 
   Users, 
-  Clock,
-  Activity 
+  Clock, 
+  TrendingUp, 
+  MapPin,
+  BookOpen,
+  Settings
 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import { EmailVerificationAlert } from "@/components/dashboard/email-verification-alert"
-import { toast } from "sonner"
+import Link from "next/link"
+import { NearbyCourses } from "@/components/dashboard/nearby-courses"
 
-const containerVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.6,
-      when: "beforeChildren",
-      staggerChildren: 0.2
-    }
-  }
-}
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0
-  }
-}
-
-export default function DashboardPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [userData, setUserData] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export default async function DashboardPage() {
+  const session = await auth()
   
-  // Référence pour éviter les appels multiples
-  const initialized = useRef(false)
-
-  // Gestion du retour depuis l'onboarding
-  useEffect(() => {
-    if (searchParams.get('fromOnboarding') === 'true') {
-      toast.success("Votre profil a été complété avec succès !")
-      router.replace('/tableau-de-bord', { scroll: false })
-    }
-  }, [searchParams, router])
-
-  // Redirection si non authentifié
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/connexion")
-    }
-  }, [status, router])
-
-  // Chargement initial des données, une seule fois
-  useEffect(() => {
-    // Fonction pour charger les données utilisateur
-    const loadUserData = async () => {
-      // Ne rien faire si déjà initialisé ou si la session n'est pas prête
-      if (initialized.current || status !== "authenticated" || !session?.user?.id) {
-        if (status !== "loading") {
-          setIsLoading(false)
-        }
-        return
-      }
-      
-      // Marquer comme initialisé immédiatement pour prévenir toute exécution ultérieure
-      initialized.current = true
-      
-      try {
-        const response = await fetch(`/api/users/${session.user.id}`)
-        
-        if (!response.ok) {
-          throw new Error('Erreur lors du chargement des données utilisateur')
-        }
-        
-        const data = await response.json()
-        console.log('🟦 [Dashboard] Données utilisateur chargées:', data)
-        setUserData(data)
-        
-        // Redirection conditionnelle
-        if (data.isFirstVisit && !data.hasProfile) {
-          await fetch(`/api/users/${session.user.id}/first-visit`, {
-            method: 'POST'
-          })
-          router.push('/profil/completer')
-        }
-      } catch (error) {
-        console.error('🔴 [Dashboard] Erreur:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadUserData()
-  }, []) // Tableau de dépendances vide pour n'exécuter qu'une seule fois
-
-  // Affichage du loader pendant le chargement
-  if (status === "loading" || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
+  if (!session) {
+    return redirect("/connexion")
   }
 
-  // Si pas de session, ne rien afficher
-  if (!session) return null
-
-  // Extraire les informations du profil
-  const isProfileComplete = userData?.hasProfile || false
-  const isFirstVisit = userData?.isFirstVisit || false
+  const isClient = session.user.role === UserRole.CLIENT
+  const isProfessional = session.user.role === UserRole.PROFESSIONAL
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <main className="container mx-auto px-4 py-8">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="space-y-6"
-        >
-          {/* Alerte de vérification d'email */}
-          {session.user.email && !session.user.emailVerified && (
-            <EmailVerificationAlert 
-              userEmail={session.user.email}
-              userId={session.user.id}
-            />
-          )}
-
-          {/* Alerte de profil incomplet */}
-          <AnimatePresence mode="wait">
-            {!isProfileComplete && !isFirstVisit && (
-              <motion.div
-                key="profile-alert"
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <Alert className="mb-6 bg-white border-primary/20 shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <AlertCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                    <div className="flex-1">
-                      <h3 className="font-medium text-primary mb-1">
-                        {session.user.role === UserRole.PROFESSIONAL 
-                          ? "Complétez votre profil professionnel"
-                          : "Complétez votre profil"}
-                      </h3>
-                      <AlertDescription>
-                        {session.user.role === UserRole.PROFESSIONAL
-                          ? "Pour commencer à recevoir des réservations, ajoutez vos informations professionnelles et configurez vos disponibilités."
-                          : "Pour commencer à prendre des rendez-vous, complétez vos informations personnelles."}
-                      </AlertDescription>
-                    </div>
-                    <Button 
-                      onClick={() => router.push("/profil/completer")}
-                      size="sm"
-                      className="flex-shrink-0"
-                    >
-                      Compléter mon profil
-                    </Button>
+    <div className="container mx-auto py-8">
+      <PageHeader
+        title={`Bonjour ${session.user.name || 'utilisateur'} !`}
+        description={
+          isClient 
+            ? "Découvrez les services bien-être près de chez vous"
+            : "Gérez votre activité et vos clients"
+        }
+      />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Colonne principale */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Section pour les clients */}
+          {isClient && (
+            <>
+              {/* Cours collectifs à proximité */}
+              <NearbyCourses />
+              
+              {/* Actions rapides pour clients */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actions rapides</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Link href="/recherche">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <MapPin className="h-6 w-6" />
+                        <span>Trouver un professionnel</span>
+                      </Button>
+                    </Link>
+                    <Link href="/cours-collectifs">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <Users className="h-6 w-6" />
+                        <span>Cours collectifs</span>
+                      </Button>
+                    </Link>
+                    <Link href="/mes-rendez-vous">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <Calendar className="h-6 w-6" />
+                        <span>Mes réservations</span>
+                      </Button>
+                    </Link>
+                    <Link href="/profil">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <Settings className="h-6 w-6" />
+                        <span>Mon profil</span>
+                      </Button>
+                    </Link>
                   </div>
-                </Alert>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* En-tête */}
-          <motion.div variants={itemVariants} className="bg-white rounded-xl border border-gray-200 p-6">
-            <h1 className="text-2xl font-title font-medium text-gray-900">
-              Bienvenue, {session.user.name || 'sur votre tableau de bord'}
-            </h1>
-            <p className="text-gray-500 mt-2">
-              {session.user.role === UserRole.PROFESSIONAL
-                ? "Gérez vos rendez-vous et votre activité en toute sérénité"
-                : "Retrouvez tous vos rendez-vous et réservations"}
-            </p>
-          </motion.div>
-
-          {/* Widgets Statistiques */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <motion.div variants={itemVariants}>
-              <StatWidget 
-                title="Rendez-vous"
-                value="0"
-                label="aujourd'hui"
-                icon={<Calendar className="h-5 w-5 text-primary" />}
-              />
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
-              <StatWidget 
-                title={session.user.role === UserRole.PROFESSIONAL ? "Clients" : "Réservations"}
-                value="0"
-                label="ce mois"
-                icon={<Users className="h-5 w-5 text-primary" />}
-              />
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
-              <StatWidget 
-                title="Heures"
-                value="0"
-                label="de séances"
-                icon={<Clock className="h-5 w-5 text-primary" />}
-              />
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
-              <StatWidget 
-                title="Activité"
-                value="0%"
-                label="de progression"
-                icon={<Activity className="h-5 w-5 text-primary" />}
-              />
-            </motion.div>
-          </div>
-
-          {/* Contenu Principal */}
-          <motion.div variants={itemVariants} className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-lg font-medium mb-4">
-              {session.user.role === UserRole.PROFESSIONAL 
-                ? "Vos prochains rendez-vous"
-                : "Vos réservations"}
-            </h2>
-            <div className="text-gray-500 text-center py-8">
-              <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-              <p>
-                {session.user.role === UserRole.PROFESSIONAL
-                  ? "Vous n'avez pas encore de rendez-vous"
-                  : "Vous n'avez pas encore de réservation"}
-              </p>
-            </div>
-          </motion.div>
-        </motion.div>
-      </main>
-    </div>
-  )
-}
-
-interface StatWidgetProps {
-  title: string;
-  value: string;
-  label: string;
-  icon: React.ReactNode;
-}
-
-function StatWidget({ title, value, label, icon }: StatWidgetProps) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 hover:border-primary/20 transition-colors">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-medium text-gray-600">{title}</h3>
-        {icon}
-      </div>
-      <div>
-        <p className="text-2xl font-semibold">{value}</p>
-        <p className="text-sm text-gray-500">{label}</p>
+                </CardContent>
+              </Card>
+            </>
+          )}
+          
+          {/* Section pour les professionnels */}
+          {isProfessional && (
+            <>
+              {/* Statistiques rapides */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Rendez-vous aujourd'hui
+                    </CardTitle>
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">3</div>
+                    <p className="text-xs text-muted-foreground">
+                      +2 par rapport à hier
+                    </p>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Clients ce mois
+                    </CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">24</div>
+                    <p className="text-xs text-muted-foreground">
+                      +12% par rapport au mois dernier
+                    </p>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Revenus ce mois
+                    </CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">1,240€</div>
+                    <p className="text-xs text-muted-foreground">
+                      +8% par rapport au mois dernier
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              {/* Actions rapides pour professionnels */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Gestion rapide</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Link href="/rendez-vous">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <Calendar className="h-6 w-6" />
+                        <span className="text-sm">Rendez-vous</span>
+                      </Button>
+                    </Link>
+                    <Link href="/clients">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <Users className="h-6 w-6" />
+                        <span className="text-sm">Clients</span>
+                      </Button>
+                    </Link>
+                    <Link href="/services">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <Clock className="h-6 w-6" />
+                        <span className="text-sm">Services</span>
+                      </Button>
+                    </Link>
+                    <Link href="/programmes-cours">
+                      <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                        <BookOpen className="h-6 w-6" />
+                        <span className="text-sm">Cours collectifs</span>
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+        
+        {/* Sidebar */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* Profil incomplet ou conseils */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">
+                {isClient ? "Optimisez votre expérience" : "Développez votre activité"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {isClient ? (
+                  <>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Quelques conseils pour tirer le meilleur parti de SereniBook
+                    </p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                        <span>Complétez votre profil pour des recommandations personnalisées</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                        <span>Explorez les cours collectifs près de chez vous</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                        <span>Laissez des avis pour aider la communauté</span>
+                      </div>
+                    </div>
+                    <Link href="/profil">
+                      <Button size="sm" className="w-full mt-4">
+                        Compléter mon profil
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Conseils pour développer votre clientèle
+                    </p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                        <span>Ajoutez des photos à vos services</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                        <span>Proposez des cours collectifs</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                        <span>Optimisez vos disponibilités</span>
+                      </div>
+                    </div>
+                    <Link href="/parametres">
+                      <Button size="sm" className="w-full mt-4">
+                        Optimiser mon profil
+                      </Button>
+                    </Link>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* Notifications ou actualités */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Nouveautés</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 text-sm">
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-1">
+                    🎉 Nouveau : Cours collectifs
+                  </h4>
+                  <p className="text-blue-700">
+                    Découvrez les cours de groupe près de chez vous !
+                  </p>
+                </div>
+                
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <h4 className="font-medium text-green-900 mb-1">
+                    📱 Application mobile
+                  </h4>
+                  <p className="text-green-700">
+                    Bientôt disponible sur mobile !
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth/auth.config"
 import { z } from "zod"
 import { BookingStatus } from "@prisma/client"
 
-// Schéma de validation pour la création/modification de rendez-vous
+// Schéma de validation pour les rendez-vous individuels uniquement
 const appointmentSchema = z.object({
   clientId: z.string().min(1, "Client requis"),
   serviceId: z.string().min(1, "Service requis"),
@@ -42,9 +42,12 @@ export async function GET(
       )
     }
     
-    // Récupérer tous les rendez-vous du praticien avec les relations
+    // Récupérer tous les rendez-vous individuels du praticien
     const appointments = await prisma.booking.findMany({
-      where: { professionalId: professional.id },
+      where: { 
+        professionalId: professional.id,
+        isGroupClass: false // Seulement les RDV individuels
+      },
       include: {
         client: {
             select: {
@@ -161,26 +164,7 @@ export async function POST(
             }
           }
         ],
-        // Utiliser AND pour combiner les conditions de statut
-        AND: [
-          {
-            OR: [
-              { status: { not: BookingStatus.CANCELLED } },
-              {
-                AND: [
-                  { status: BookingStatus.CANCELLED },
-                  {
-                    client: {
-                      user: {
-                        email: "system@serenibook.app"
-                      }
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+        status: { not: BookingStatus.CANCELLED }
       }
     })
     
@@ -195,7 +179,7 @@ export async function POST(
       )
     }
     
-    // Créer le rendez-vous
+    // Créer le rendez-vous individuel
     const appointment = await prisma.booking.create({
       data: {
         startTime,
@@ -206,6 +190,9 @@ export async function POST(
         serviceId: validatedData.serviceId,
         clientId: validatedData.clientId,
         professionalId: professional.id,
+        isGroupClass: false, // Forcer à false pour les RDV individuels
+        maxParticipants: 1,
+        currentParticipants: 1,
       },
       include: {
         client: {

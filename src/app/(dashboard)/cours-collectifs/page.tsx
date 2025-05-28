@@ -1,146 +1,167 @@
-// src/app/(dashboard)/cours-collectifs/page.tsx
+// src/app/(dashboard)/cours-collectifs/page.tsx (correction des imports)
 "use client"
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageHeader } from "@/components/ui/page-header"
-import { Loader2, Plus, Calendar, Users } from "lucide-react"
+import { Loader2, Plus, Users, MapPin, Wifi, Edit, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
-import Link from "next/link"
-import { AppointmentForm } from "@/components/appointments/appointment-form"
-import { GroupClassDetails } from "@/components/appointments/group-class-details"
+import { GroupClassForm, type GroupClassFormData } from "@/components/group-classes/group-class-form"
+import { GroupSessionForm, type SessionFormData } from "@/components/group-classes/group-session-form"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
+interface GroupClass {
+  id: string
+  name: string
+  description: string
+  price: number
+  duration: number
+  maxParticipants: number
+  category: string
+  level: string
+  isOnline: boolean
+  city: string
+  address: string
+  equipment: string[]
+  active: boolean
+  sessions: Array<{
+    id: string
+    startTime: string
+    endTime: string
+    status: string
+    currentParticipants: number
+    registrations: { id: string }[]
+  }> // Enlever le ? pour que ce soit obligatoire
+}
 
 export default function CoursCollectifsPage() {
   const { data: session } = useSession()
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const selectedClassId = searchParams.get('id')
   const [loading, setLoading] = useState(true)
-  const [groupClasses, setGroupClasses] = useState<any[]>([])
-  const [clients, setClients] = useState<any[]>([])
-  const [services, setServices] = useState<any[]>([])
+  const [groupClasses, setGroupClasses] = useState<GroupClass[]>([])
   const [isFormOpen, setIsFormOpen] = useState(false)
-  const [selectedClass, setSelectedClass] = useState<any | null>(null)
-  
-  // Charger les données
+  const [isSessionFormOpen, setIsSessionFormOpen] = useState(false)
+  const [selectedClass, setSelectedClass] = useState<GroupClass | null>(null)
+  const [editingClass, setEditingClass] = useState<GroupClass | null>(null)
+
+  // Charger les cours collectifs
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchGroupClasses = async () => {
       if (!session?.user?.id) return
       
       try {
         setLoading(true)
         
-        // Charger les cours collectifs
-        const classesResponse = await fetch(`/api/users/${session.user.id}/group-classes`)
-        if (!classesResponse.ok) {
+        const response = await fetch(`/api/users/${session.user.id}/cours-collectifs`)
+        if (!response.ok) {
           throw new Error("Erreur lors du chargement des cours collectifs")
         }
-        const classesData = await classesResponse.json()
-        setGroupClasses(classesData)
         
-        // Si un ID est fourni dans l'URL, sélectionner automatiquement ce cours
-        if (selectedClassId && classesData.length > 0) {
-          const foundClass = classesData.find((c: any) => c.id === selectedClassId)
-          if (foundClass) {
-            setSelectedClass(foundClass)
-          }
-        }
-        
-        // Charger les clients
-        const clientsResponse = await fetch(`/api/users/${session.user.id}/clients`)
-        if (clientsResponse.ok) {
-          const clientsData = await clientsResponse.json()
-          setClients(clientsData)
-        }
-        
-        // Charger les services de groupe
-        const servicesResponse = await fetch(`/api/users/${session.user.id}/services`)
-        if (servicesResponse.ok) {
-          const servicesData = await servicesResponse.json()
-          // Filtrer pour n'obtenir que les services de groupe
-          const groupServices = servicesData.filter((service: any) => 
-            service.maxParticipants > 1 && service.active !== false
-          )
-          setServices(groupServices)
-        }
+        const data = await response.json()
+        setGroupClasses(data)
       } catch (error) {
         console.error("Erreur:", error)
-        toast.error("Erreur lors du chargement des données")
+        toast.error("Erreur lors du chargement des cours collectifs")
       } finally {
         setLoading(false)
       }
     }
     
-    fetchData()
-  }, [session?.user?.id, selectedClassId])
-  
+    fetchGroupClasses()
+  }, [session?.user?.id])
+
   // Créer un nouveau cours collectif
-  const handleCreateGroupClass = async (data: any) => {
-    if (!session?.user?.id) return;
+  const handleCreateGroupClass = async (data: GroupClassFormData) => {
+  if (!session?.user?.id) return
+  
+  try {
+    const response = await fetch(`/api/users/${session.user.id}/cours-collectifs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || "Erreur lors de la création du cours collectif")
+    }
+    
+    const result = await response.json()
+    
+    // S'assurer que sessions existe avec une valeur par défaut
+    const newGroupClass = {
+      ...result.groupClass,
+      sessions: result.groupClass.sessions || [] // Valeur par défaut si undefined
+    }
+    
+    // Ajouter le nouveau cours à la liste
+    setGroupClasses(prev => [...prev, newGroupClass])
+    setIsFormOpen(false)
+    setEditingClass(null)
+    
+    toast.success("Cours collectif créé avec succès")
+  } catch (error) {
+    console.error("Erreur:", error)
+    throw error
+  }
+}
+
+  // Modifier un cours collectif
+  const handleEditGroupClass = async (data: GroupClassFormData) => {
+    if (!session?.user?.id || !editingClass) return
     
     try {
-      console.log("Données du formulaire:", data);
-      
-      // S'assurer que c'est bien un cours collectif
-      const formData = {
-        serviceId: data.serviceId,
-        date: data.date,
-        startTime: data.startTime,
-        notes: data.notes || "",
-        maxParticipants: data.maxParticipants || 10,
-        isGroupClass: true,
-      };
-      
-      console.log("Données envoyées à l'API:", formData);
-      
-      const response = await fetch(`/api/users/${session.user.id}/group-classes`, {
-        method: "POST",
+      const response = await fetch(`/api/users/${session.user.id}/cours-collectifs/${editingClass.id}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
-      });
+        body: JSON.stringify(data),
+      })
       
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Erreur API:", errorData);
-        throw new Error(errorData.error || "Erreur lors de la création du cours collectif");
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Erreur lors de la modification du cours")
       }
       
-      const newClass = await response.json();
-      console.log("Nouveau cours créé:", newClass);
+      const result = await response.json()
       
-      // Mettre à jour la liste locale
-      if (newClass.groupClass) {
-        setGroupClasses(prev => [...prev, newClass.groupClass]);
-      } else if (newClass.success) {
-        // Actualiser la liste des cours
-        await refreshGroupClasses();
-      }
+      // Mettre à jour la liste
+      setGroupClasses(prev => 
+        prev.map(c => c.id === editingClass.id ? result.groupClass : c)
+      )
+      setIsFormOpen(false)
+      setEditingClass(null)
       
-      setIsFormOpen(false);
-      toast.success("Cours collectif créé avec succès");
-      return Promise.resolve();
+      toast.success("Cours collectif modifié avec succès")
     } catch (error) {
-      console.error("Erreur détaillée:", error);
-      toast.error(error instanceof Error ? error.message : "Erreur lors de la création du cours collectif");
-      return Promise.reject(error);
+      console.error("Erreur:", error)
+      throw error
     }
-  };
-  
+  }
+
   // Supprimer un cours collectif
-  const handleDeleteGroupClass = async () => {
-    if (!session?.user?.id || !selectedClass) return
+  const handleDeleteGroupClass = async (groupClass: GroupClass) => {
+    if (!session?.user?.id) return
     
     try {
-      const response = await fetch(`/api/users/${session.user.id}/group-classes/${selectedClass.id}`, {
+      const response = await fetch(`/api/users/${session.user.id}/cours-collectifs/${groupClass.id}`, {
         method: "DELETE",
       })
       
@@ -148,113 +169,53 @@ export default function CoursCollectifsPage() {
         throw new Error("Erreur lors de la suppression du cours collectif")
       }
       
-      // Mettre à jour la liste locale
-      setGroupClasses(prev => prev.filter(c => c.id !== selectedClass.id))
-      setSelectedClass(null)
+      // Retirer de la liste
+      setGroupClasses(prev => prev.filter(c => c.id !== groupClass.id))
       
-      return Promise.resolve()
+      toast.success("Cours collectif supprimé avec succès")
     } catch (error) {
       console.error("Erreur:", error)
-      return Promise.reject(error)
+      toast.error("Erreur lors de la suppression du cours collectif")
     }
   }
-  
-  // Ajouter un participant
-  const handleAddParticipant = async (clientId: string) => {
+
+  // Créer une session pour un cours
+  const handleCreateSession = async (data: SessionFormData) => {
     if (!session?.user?.id || !selectedClass) return
     
     try {
-      const response = await fetch(`/api/users/${session.user.id}/group-classes/${selectedClass.id}/participants`, {
+      const response = await fetch(`/api/users/${session.user.id}/cours-collectifs/${selectedClass.id}/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ clientId }),
+        body: JSON.stringify(data),
       })
       
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Erreur lors de l'ajout du participant")
+        throw new Error(errorData.error || "Erreur lors de la création de la séance")
       }
       
-      // Recharger les données du cours
-      await refreshSelectedClass()
+      const result = await response.json()
       
-      return Promise.resolve()
-    } catch (error) {
-      console.error("Erreur:", error)
-      return Promise.reject(error)
-    }
-  }
-  
-  // Supprimer un participant
-  const handleRemoveParticipant = async (participantId: string) => {
-    if (!session?.user?.id || !selectedClass) return
-    
-    try {
-      const response = await fetch(`/api/users/${session.user.id}/group-classes/${selectedClass.id}/participants?participantId=${participantId}`, {
-        method: "DELETE",
-      })
-      
-      if (!response.ok) {
-        throw new Error("Erreur lors de la suppression du participant")
-      }
-      
-      // Recharger les données du cours
-      await refreshSelectedClass()
-      
-      return Promise.resolve()
-    } catch (error) {
-      console.error("Erreur:", error)
-      return Promise.reject(error)
-    }
-  }
-  
-  // Rafraîchir les données du cours sélectionné
-  const refreshSelectedClass = async () => {
-    if (!session?.user?.id || !selectedClass) return
-    
-    try {
-      const response = await fetch(`/api/users/${session.user.id}/group-classes/${selectedClass.id}`)
-      
-      if (!response.ok) {
-        throw new Error("Erreur lors du chargement des détails du cours")
-      }
-      
-      const updatedClass = await response.json()
-      
-      // Mettre à jour la sélection et la liste
-      setSelectedClass(updatedClass)
+      // Mettre à jour les sessions du cours sélectionné
       setGroupClasses(prev => 
-        prev.map(c => c.id === updatedClass.id ? updatedClass : c)
+        prev.map(c => 
+          c.id === selectedClass.id 
+            ? { ...c, sessions: [...c.sessions, result.session] }
+            : c
+        )
       )
+      
+      setIsSessionFormOpen(false)
+      toast.success("Séance créée avec succès")
     } catch (error) {
       console.error("Erreur:", error)
-      toast.error("Erreur lors du rafraîchissement des données")
+      throw error
     }
   }
-  
-  // Fonction pour rafraîchir la liste des cours collectifs
-  const refreshGroupClasses = async () => {
-    if (!session?.user?.id) return;
-    
-    try {
-      const response = await fetch(`/api/users/${session.user.id}/group-classes`);
-      if (response.ok) {
-        const data = await response.json();
-        setGroupClasses(data);
-      }
-    } catch (error) {
-      console.error("Erreur lors du rafraîchissement des cours:", error);
-    }
-  };
-  
-  // Formater la date pour l'affichage
-  const formatClassDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return format(date, "EEEE d MMMM yyyy 'à' HH'h'mm", { locale: fr })
-  }
-  
+
   if (loading) {
     return (
       <div className="container mx-auto py-8">
@@ -268,133 +229,203 @@ export default function CoursCollectifsPage() {
       </div>
     )
   }
-  
+
   return (
     <div className="container mx-auto py-8">
       <PageHeader
         title="Cours collectifs"
         description="Gérez vos cours et sessions de groupe"
       >
-        {services.length > 0 ? (
-          <Button onClick={() => setIsFormOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nouveau cours collectif
-          </Button>
-        ) : (
-          <Link href="/services">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Créer un service de groupe
-            </Button>
-          </Link>
-        )}
+        <Button onClick={() => setIsFormOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nouveau cours collectif
+        </Button>
       </PageHeader>
-      
-      {services.length === 0 ? (
+
+      {groupClasses.length === 0 ? (
         <Card className="mt-8">
           <CardContent className="py-8 text-center">
             <div className="mb-4 flex justify-center">
               <Users className="h-12 w-12 text-gray-400" />
             </div>
-            <h3 className="text-xl font-medium mb-2">Aucun service de groupe configuré</h3>
+            <h3 className="text-xl font-medium mb-2">Aucun cours collectif</h3>
             <p className="text-gray-500 mb-6 max-w-md mx-auto">
-              Pour créer des cours collectifs, vous devez d'abord configurer un service qui permet d'accueillir plusieurs participants.
+              Créez votre premier cours collectif pour commencer à proposer des sessions de groupe à vos clients.
             </p>
-            <Link href="/services">
-              <Button>
-                Configurer un service de groupe
-              </Button>
-            </Link>
+            <Button onClick={() => setIsFormOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Créer mon premier cours
+            </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Liste des cours collectifs */}
-          <div className="lg:col-span-2">
-            <Card>
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {groupClasses.map((groupClass) => (
+            <Card key={groupClass.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
-                <CardTitle>Mes cours collectifs</CardTitle>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      {groupClass.isOnline ? (
+                        <Wifi className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <MapPin className="h-5 w-5 text-blue-500" />
+                      )}
+                      {groupClass.name}
+                    </CardTitle>
+                    <div className="flex gap-2 mt-2">
+                      <Badge variant="secondary">{groupClass.category}</Badge>
+                      <Badge variant="outline">{groupClass.level}</Badge>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setEditingClass(groupClass)
+                        setIsFormOpen(true)
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Supprimer le cours collectif</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Êtes-vous sûr de vouloir supprimer "{groupClass.name}" ? 
+                            Cette action est irréversible et supprimera également toutes les séances associées.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annuler</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDeleteGroupClass(groupClass)}>
+                            Supprimer
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                {groupClasses.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Aucun cours collectif</h3>
-                    <p className="text-gray-500 mb-6">
-                      Vous n'avez pas encore créé de cours collectif.
-                    </p>
-                    <Button onClick={() => setIsFormOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Créer mon premier cours
-                    </Button>
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600 line-clamp-2">
+                    {groupClass.description}
+                  </p>
+                  
+                  <div className="flex justify-between text-sm">
+                    <span className="font-semibold text-lg">{groupClass.price}€</span>
+                    <span className="text-gray-500">{groupClass.duration} min</span>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {groupClasses.map((groupClass) => (
-                      <div 
-                        key={groupClass.id} 
-                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                          selectedClass?.id === groupClass.id 
-                            ? 'bg-primary/5 border-primary/30' 
-                            : 'hover:bg-gray-50'
-                        }`}
-                        onClick={() => setSelectedClass(groupClass)}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-medium text-lg">{groupClass.service.name}</h3>
-                            <p className="text-sm text-gray-500">
-                              {formatClassDate(groupClass.startTime)}
-                            </p>
-                          </div>
-                          <Badge className="bg-blue-100 text-blue-800 border-blue-300">
-                            {groupClass.currentParticipants}/{groupClass.maxParticipants} participants
+                  
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Users className="h-4 w-4" />
+                      Max {groupClass.maxParticipants} personnes
+                    </span>
+                    {!groupClass.isOnline && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        {groupClass.city}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {groupClass.equipment.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-700 mb-1">Matériel requis :</p>
+                      <div className="flex flex-wrap gap-1">
+                        {groupClass.equipment.slice(0, 2).map((item) => (
+                          <Badge key={item} variant="outline" className="text-xs">
+                            {item}
                           </Badge>
-                        </div>
+                        ))}
+                        {groupClass.equipment.length > 2 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{groupClass.equipment.length - 2}
+                          </Badge>
+                        )}
                       </div>
-                    ))}
+                    </div>
+                  )}
+                  
+                  <div className="pt-2">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium">Prochaines séances</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedClass(groupClass)
+                          setIsSessionFormOpen(true)
+                        }}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Ajouter
+                      </Button>
+                    </div>
+                    
+                    {groupClass.sessions.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">Aucune séance programmée</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {groupClass.sessions.slice(0, 2).map((session) => (
+                          <div key={session.id} className="flex justify-between items-center text-xs bg-gray-50 rounded p-2">
+                            <span>
+                              {format(new Date(session.startTime), 'dd/MM à HH:mm', { locale: fr })}
+                            </span>
+                            <span className="text-gray-500">
+                              {session.currentParticipants}/{groupClass.maxParticipants}
+                            </span>
+                          </div>
+                        ))}
+                        {groupClass.sessions.length > 2 && (
+                          <p className="text-xs text-gray-500 text-center">
+                            +{groupClass.sessions.length - 2} autres séances
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
-          </div>
-          
-          {/* Détails du cours sélectionné */}
-          <div className="lg:col-span-1">
-            {selectedClass ? (
-              <GroupClassDetails
-                groupClass={selectedClass}
-                clients={clients}
-                onEdit={() => {/* TODO: implement edit */}}
-                onDelete={handleDeleteGroupClass}
-                onAddParticipant={handleAddParticipant}
-                onRemoveParticipant={handleRemoveParticipant}
-              />
-            ) : (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <h3 className="text-lg font-medium mb-2">Détails du cours</h3>
-                  <p className="text-gray-500">
-                    Sélectionnez un cours pour voir ses détails et gérer les participants.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          ))}
         </div>
       )}
-      
-      {/* Formulaire de création de cours collectif */}
-      <AppointmentForm
+
+      {/* Formulaire de création/modification de cours collectif */}
+      <GroupClassForm
         open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        onSubmit={handleCreateGroupClass}
-        clients={clients}
-        services={services}
-        defaultValues={{
-          isGroupClass: true,
+        onOpenChange={(open: boolean) => {
+          setIsFormOpen(open)
+          if (!open) setEditingClass(null)
         }}
+        onSubmit={editingClass ? handleEditGroupClass : handleCreateGroupClass}
+        onCancel={() => {
+          setIsFormOpen(false)
+          setEditingClass(null)
+        }}
+        initialData={editingClass || undefined}
       />
+
+      {/* Formulaire de création de session */}
+      {selectedClass && (
+        <GroupSessionForm
+          open={isSessionFormOpen}
+          onOpenChange={setIsSessionFormOpen}
+          onSubmit={handleCreateSession}
+          onCancel={() => setIsSessionFormOpen(false)}
+          groupClass={selectedClass}
+        />
+      )}
     </div>
   )
 }
