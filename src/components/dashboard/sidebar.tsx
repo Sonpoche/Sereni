@@ -15,7 +15,8 @@ import {
   Clock,
   X,
   Star,
-  UserCircle
+  UserCircle,
+  BookOpen
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -38,41 +39,40 @@ interface MenuItem {
 export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
   const pathname = usePathname()
 
-    const menuItems: MenuItem[] = [
-      {
-        title: "Tableau de bord",
-        href: "/tableau-de-bord",
-        icon: LayoutDashboard,
-      },
-      {
-        title: "Mes rendez-vous",
-        href: user.role === UserRole.PROFESSIONAL ? "/rendez-vous" : "/mes-rendez-vous",
-        icon: Calendar,
-      },
-      {
-        title: "Mon profil",
-        href: "/profil",
-        icon: UserCircle,
-      },
-      {
-        title: "Clients",
-        href: "/clients",
-        icon: Users,
-        roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
-      },
-      {
-        title: "Services",
-        href: "/services",
-        icon: Clock,
-        roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
-      },
-      // Ajouter ce nouvel élément pour les cours collectifs
-      {
-        title: "Cours collectifs",
-        href: "/cours-collectifs",
-        icon: Users, // Vous pouvez utiliser un autre icône si vous préférez
-        roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
-      },
+  const menuItems: MenuItem[] = [
+    {
+      title: "Tableau de bord",
+      href: "/tableau-de-bord",
+      icon: LayoutDashboard,
+    },
+    {
+      title: "Mes rendez-vous",
+      href: user.role === UserRole.PROFESSIONAL ? "/rendez-vous" : "/mes-rendez-vous",
+      icon: Calendar,
+    },
+    {
+      title: "Mon profil",
+      href: "/profil",
+      icon: UserCircle,
+    },
+    {
+      title: "Clients",
+      href: "/clients",
+      icon: Users,
+      roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
+    },
+    {
+      title: "Services",
+      href: "/services",
+      icon: Clock,
+      roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
+    },
+    {
+      title: "Mes cours collectifs",
+      href: "/mes-cours-collectifs",
+      icon: BookOpen,
+      roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
+    },
   ]
 
   return (

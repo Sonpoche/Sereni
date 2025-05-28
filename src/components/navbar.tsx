@@ -16,7 +16,8 @@ import {
   Settings,
   Clock,
   Search,
-  MapPin
+  MapPin,
+  BookOpen
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
@@ -35,11 +36,11 @@ export function Navbar({ onMenuClick }: NavbarProps) {
   const { data: session } = useSession()
   
   return (
-    <nav className="border-b">
+    <nav className="border-b bg-white">
       <div className="w-full mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo et menu burger */}
         <div className="flex items-center gap-4">
-          {onMenuClick && (
+          {onMenuClick && session && (
             <Button
               variant="ghost"
               size="icon"
@@ -64,6 +65,9 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             {!session && (
               <>
                 <Button variant="ghost" size="sm" asChild>
+                  <Link href="/cours-collectifs">Cours collectifs</Link>
+                </Button>
+                <Button variant="ghost" size="sm" asChild>
                   <Link href="/recherche">Trouver un professionnel</Link>
                 </Button>
                 <Button variant="ghost" size="sm" asChild>
@@ -75,12 +79,20 @@ export function Navbar({ onMenuClick }: NavbarProps) {
               </>
             )}
             {session && session.user.role === UserRole.CLIENT && (
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/recherche">
-                  <MapPin className="h-4 w-4 mr-1" />
-                  Trouver un professionnel
-                </Link>
-              </Button>
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/cours-collectifs">
+                    <BookOpen className="h-4 w-4 mr-1" />
+                    Cours collectifs
+                  </Link>
+                </Button>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/recherche">
+                    <MapPin className="h-4 w-4 mr-1" />
+                    Trouver un professionnel
+                  </Link>
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -98,21 +110,32 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             </>
           ) : (
             <>
-              {/* Bouton de recherche rapide pour les clients */}
-              {session.user.role === UserRole.CLIENT && (
-                <Button variant="ghost" size="icon" className="sm:hidden" asChild>
-                  <Link href="/recherche">
-                    <Search className="h-5 w-5" />
-                  </Link>
-                </Button>
-              )}
+              {/* Boutons de navigation rapide pour mobile */}
+              <div className="flex md:hidden items-center gap-2">
+                {session.user.role === UserRole.CLIENT && (
+                  <>
+                    <Button variant="ghost" size="icon" asChild>
+                      <Link href="/cours-collectifs">
+                        <BookOpen className="h-5 w-5" />
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" size="icon" asChild>
+                      <Link href="/recherche">
+                        <Search className="h-5 w-5" />
+                      </Link>
+                    </Button>
+                  </>
+                )}
+              </div>
               
+              {/* Notifications */}
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-5 w-5" />
                 {/* Indicateur de notification - décommenter pour l'utiliser */}
                 {/* <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span> */}
               </Button>
 
+              {/* Menu utilisateur */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2">
@@ -128,16 +151,19 @@ export function Navbar({ onMenuClick }: NavbarProps) {
                   sideOffset={6}
                   className="w-56 rounded-md p-2 bg-white shadow-md border"
                 >
+                  {/* Tableau de bord */}
                   <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
                     <LayoutDashboard className="h-4 w-4" />
                     <Link href="/tableau-de-bord" className="flex-1">Tableau de bord</Link>
                   </DropdownMenuItem>
                   
+                  {/* Mon profil */}
                   <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
                     <UserCircle className="h-4 w-4" />
                     <Link href="/profil" className="flex-1">Mon profil</Link>
                   </DropdownMenuItem>
 
+                  {/* Menu spécifique aux professionnels */}
                   {session.user.role === UserRole.PROFESSIONAL && (
                     <>
                       <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
@@ -152,16 +178,32 @@ export function Navbar({ onMenuClick }: NavbarProps) {
                         <Clock className="h-4 w-4" />
                         <Link href="/services" className="flex-1">Services</Link>
                       </DropdownMenuItem>
+                      <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
+                        <BookOpen className="h-4 w-4" />
+                        <Link href="/mes-cours-collectifs" className="flex-1">Mes cours collectifs</Link>
+                      </DropdownMenuItem>
                     </>
                   )}
 
+                  {/* Menu spécifique aux clients */}
                   {session.user.role === UserRole.CLIENT && (
-                    <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
-                      <Calendar className="h-4 w-4" />
-                      <Link href="/mes-rendez-vous" className="flex-1">Mes réservations</Link>
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
+                        <Calendar className="h-4 w-4" />
+                        <Link href="/mes-rendez-vous" className="flex-1">Mes réservations</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
+                        <BookOpen className="h-4 w-4" />
+                        <Link href="/cours-collectifs" className="flex-1">Cours collectifs</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
+                        <Search className="h-4 w-4" />
+                        <Link href="/recherche" className="flex-1">Trouver un praticien</Link>
+                      </DropdownMenuItem>
+                    </>
                   )}
 
+                  {/* Paramètres */}
                   <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
                     <Settings className="h-4 w-4" />
                     <Link href="/parametres" className="flex-1">Paramètres</Link>
@@ -169,6 +211,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
 
                   <DropdownMenuSeparator className="my-2 h-px bg-gray-100" />
                   
+                  {/* Déconnexion */}
                   <DropdownMenuItem 
                     onClick={() => signOut({ callbackUrl: "/connexion" })}
                     className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer"

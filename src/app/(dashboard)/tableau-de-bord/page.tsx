@@ -63,7 +63,7 @@ export default async function DashboardPage() {
                     </Link>
                     <Link href="/cours-collectifs">
                       <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
-                        <Users className="h-6 w-6" />
+                        <BookOpen className="h-6 w-6" />
                         <span>Cours collectifs</span>
                       </Button>
                     </Link>
@@ -161,10 +161,10 @@ export default async function DashboardPage() {
                         <span className="text-sm">Services</span>
                       </Button>
                     </Link>
-                    <Link href="/programmes-cours">
+                    <Link href="/mes-cours-collectifs">
                       <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
                         <BookOpen className="h-6 w-6" />
-                        <span className="text-sm">Cours collectifs</span>
+                        <span className="text-sm">Mes cours collectifs</span>
                       </Button>
                     </Link>
                   </div>

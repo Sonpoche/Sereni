@@ -1,4 +1,4 @@
-// src/app/(dashboard)/cours-collectifs/page.tsx (correction des imports)
+// src/app/(dashboard)/mes-cours-collectifs/page.tsx (pour les professionnels)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -46,10 +46,10 @@ interface GroupClass {
     status: string
     currentParticipants: number
     registrations: { id: string }[]
-  }> // Enlever le ? pour que ce soit obligatoire
+  }>
 }
 
-export default function CoursCollectifsPage() {
+export default function MesCoursCollectifsPage() {
   const { data: session } = useSession()
   const [loading, setLoading] = useState(true)
   const [groupClasses, setGroupClasses] = useState<GroupClass[]>([])
@@ -86,41 +86,39 @@ export default function CoursCollectifsPage() {
 
   // Créer un nouveau cours collectif
   const handleCreateGroupClass = async (data: GroupClassFormData) => {
-  if (!session?.user?.id) return
-  
-  try {
-    const response = await fetch(`/api/users/${session.user.id}/cours-collectifs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    })
+    if (!session?.user?.id) return
     
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || "Erreur lors de la création du cours collectif")
+    try {
+      const response = await fetch(`/api/users/${session.user.id}/cours-collectifs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Erreur lors de la création du cours collectif")
+      }
+      
+      const result = await response.json()
+      
+      const newGroupClass = {
+        ...result.groupClass,
+        sessions: result.groupClass.sessions || []
+      }
+      
+      setGroupClasses(prev => [...prev, newGroupClass])
+      setIsFormOpen(false)
+      setEditingClass(null)
+      
+      toast.success("Cours collectif créé avec succès")
+    } catch (error) {
+      console.error("Erreur:", error)
+      throw error
     }
-    
-    const result = await response.json()
-    
-    // S'assurer que sessions existe avec une valeur par défaut
-    const newGroupClass = {
-      ...result.groupClass,
-      sessions: result.groupClass.sessions || [] // Valeur par défaut si undefined
-    }
-    
-    // Ajouter le nouveau cours à la liste
-    setGroupClasses(prev => [...prev, newGroupClass])
-    setIsFormOpen(false)
-    setEditingClass(null)
-    
-    toast.success("Cours collectif créé avec succès")
-  } catch (error) {
-    console.error("Erreur:", error)
-    throw error
   }
-}
 
   // Modifier un cours collectif
   const handleEditGroupClass = async (data: GroupClassFormData) => {
@@ -142,7 +140,6 @@ export default function CoursCollectifsPage() {
       
       const result = await response.json()
       
-      // Mettre à jour la liste
       setGroupClasses(prev => 
         prev.map(c => c.id === editingClass.id ? result.groupClass : c)
       )
@@ -169,7 +166,6 @@ export default function CoursCollectifsPage() {
         throw new Error("Erreur lors de la suppression du cours collectif")
       }
       
-      // Retirer de la liste
       setGroupClasses(prev => prev.filter(c => c.id !== groupClass.id))
       
       toast.success("Cours collectif supprimé avec succès")
@@ -199,7 +195,6 @@ export default function CoursCollectifsPage() {
       
       const result = await response.json()
       
-      // Mettre à jour les sessions du cours sélectionné
       setGroupClasses(prev => 
         prev.map(c => 
           c.id === selectedClass.id 
@@ -220,7 +215,7 @@ export default function CoursCollectifsPage() {
     return (
       <div className="container mx-auto py-8">
         <PageHeader
-          title="Cours collectifs"
+          title="Mes cours collectifs"
           description="Gérez vos cours et sessions de groupe"
         />
         <div className="flex justify-center items-center h-64">
@@ -233,7 +228,7 @@ export default function CoursCollectifsPage() {
   return (
     <div className="container mx-auto py-8">
       <PageHeader
-        title="Cours collectifs"
+        title="Mes cours collectifs"
         description="Gérez vos cours et sessions de groupe"
       >
         <Button onClick={() => setIsFormOpen(true)}>

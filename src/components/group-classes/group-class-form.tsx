@@ -98,7 +98,7 @@ export function GroupClassForm({
       duration: 60,
       maxParticipants: 10,
       category: "",
-      level: "TOUS_NIVEAUX",
+      level: "TOUS_NIVEAUX", // Valeur par défaut non vide
       isOnline: false,
       address: "",
       city: "",
@@ -111,7 +111,10 @@ export function GroupClassForm({
   // Réinitialiser le formulaire quand initialData change
   useEffect(() => {
     if (initialData) {
-      form.reset(initialData)
+      form.reset({
+        ...initialData,
+        level: initialData.level || "TOUS_NIVEAUX" // S'assurer qu'on a une valeur par défaut
+      })
       setEquipment(initialData.equipment || [])
     } else {
       form.reset({
