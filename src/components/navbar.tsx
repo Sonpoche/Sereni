@@ -36,7 +36,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
   const { data: session } = useSession()
   
   return (
-    <nav className="border-b bg-white">
+    <nav className="border-b bg-white relative z-50">
       <div className="w-full mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo et menu burger */}
         <div className="flex items-center gap-4">
@@ -131,8 +131,6 @@ export function Navbar({ onMenuClick }: NavbarProps) {
               {/* Notifications */}
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-5 w-5" />
-                {/* Indicateur de notification - décommenter pour l'utiliser */}
-                {/* <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span> */}
               </Button>
 
               {/* Menu utilisateur */}
@@ -149,7 +147,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
                 <DropdownMenuContent 
                   align="end" 
                   sideOffset={6}
-                  className="w-56 rounded-md p-2 bg-white shadow-md border"
+                  className="w-56 rounded-md p-2 bg-white shadow-md border z-[60]"
                 >
                   {/* Tableau de bord */}
                   <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">

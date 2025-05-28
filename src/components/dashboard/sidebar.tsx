@@ -16,7 +16,9 @@ import {
   X,
   Star,
   UserCircle,
-  BookOpen
+  BookOpen,
+  Search,
+  MapPin
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -51,6 +53,17 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
       icon: Calendar,
     },
     {
+      title: "Cours collectifs",
+      href: user.role === UserRole.PROFESSIONAL ? "/mes-cours-collectifs" : "/cours-collectifs",
+      icon: BookOpen,
+    },
+    {
+      title: "Trouver un professionnel",
+      href: "/recherche",
+      icon: Search,
+      roles: [UserRole.CLIENT],
+    },
+    {
       title: "Mon profil",
       href: "/profil",
       icon: UserCircle,
@@ -67,12 +80,6 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
       icon: Clock,
       roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
     },
-    {
-      title: "Mes cours collectifs",
-      href: "/mes-cours-collectifs",
-      icon: BookOpen,
-      roles: [UserRole.PROFESSIONAL, UserRole.ADMIN],
-    },
   ]
 
   return (
@@ -80,20 +87,20 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
       {/* Overlay mobile */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 lg:hidden z-40"
+          className="fixed inset-0 bg-black/50 lg:hidden z-20"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - Z-index inférieur à la navbar */}
       <aside className={cn(
-        "fixed top-0 left-0 z-40 h-full w-64 bg-white border-r shadow-md transform transition-transform duration-300 ease-in-out",
+        "fixed top-16 left-0 z-30 h-[calc(100vh-4rem)] w-64 bg-white border-r shadow-md transform transition-transform duration-300 ease-in-out",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* En-tête mobile */}
-        <div className="h-16 flex items-center justify-between px-4 border-b">
-          <span className="font-title text-xl font-bold text-primary">
-            SereniBook
+        <div className="h-12 flex items-center justify-between px-4 border-b lg:hidden">
+          <span className="font-title text-lg font-bold text-primary">
+            Menu
           </span>
           <Button
             variant="ghost"
@@ -106,7 +113,7 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <div className="p-4 pt-6 overflow-y-auto h-[calc(100vh-4rem)]">
+        <div className="p-4 pt-6 overflow-y-auto h-full">
           <nav className="space-y-1">
             {menuItems.map((item) => {
               // Vérifier si l'élément doit être affiché pour ce rôle
@@ -139,6 +146,27 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
               )
             })}
           </nav>
+
+          {/* Section paramètres en bas */}
+          <div className="mt-8 pt-4 border-t">
+            <Link
+              href="/parametres"
+              onClick={() => {
+                if (window.innerWidth < 1024) {
+                  onClose()
+                }
+              }}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                pathname === "/parametres"
+                  ? "bg-primary/10 text-primary"
+                  : "text-gray-600 hover:bg-gray-100"
+              )}
+            >
+              <Settings className="h-5 w-5 flex-shrink-0" />
+              <span>Paramètres</span>
+            </Link>
+          </div>
         </div>
       </aside>
     </>

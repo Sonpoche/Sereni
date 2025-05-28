@@ -1,3 +1,4 @@
+// src/middleware.ts
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { auth } from "@/lib/auth/auth.config"
@@ -10,11 +11,23 @@ const publicPaths = [
   "/mot-de-passe-oublie",
   "/reinitialiser-mot-de-passe",
   "/about", 
-  "/contact"
+  "/contact",
+  "/cours-collectifs",
+  "/recherche",
+  "/tarifs"
 ]
 
 // Pages qui requièrent une authentification
-const protectedPaths = ["/tableau-de-bord", "/profil", "/rendez-vous", "/clients", "/services"]
+const protectedPaths = [
+  "/tableau-de-bord", 
+  "/profil", 
+  "/rendez-vous", 
+  "/mes-rendez-vous",
+  "/clients", 
+  "/services",
+  "/mes-cours-collectifs",
+  "/parametres"
+]
 
 export async function middleware(request: NextRequest) {
   // Vérifier si le chemin actuel est public
@@ -33,7 +46,7 @@ export async function middleware(request: NextRequest) {
   // Protection spéciale pour la page de complétion de profil
   if (request.nextUrl.pathname === "/profil/completer") {
     if (!session) {
-      return NextResponse.redirect(new URL("/login", request.url))
+      return NextResponse.redirect(new URL("/connexion", request.url))
     }
 
     // Si le profil est déjà complété, rediriger vers le tableau de bord
@@ -45,7 +58,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Si l'utilisateur est sur une page publique et est connecté
-  if (session && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/register")) {
+  if (session && (request.nextUrl.pathname === "/connexion" || request.nextUrl.pathname === "/inscription")) {
     return NextResponse.redirect(new URL("/tableau-de-bord", request.url))
   }
 
@@ -58,7 +71,7 @@ export async function middleware(request: NextRequest) {
 
     const encodedCallbackUrl = encodeURIComponent(callbackUrl)
     return NextResponse.redirect(
-      new URL(`/login?callbackUrl=${encodedCallbackUrl}`, request.url)
+      new URL(`/connexion?callbackUrl=${encodedCallbackUrl}`, request.url)
     )
   }
 
@@ -67,13 +80,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 }

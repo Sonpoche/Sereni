@@ -66,27 +66,33 @@ export default function DashboardLayout({
   // Si l'utilisateur est authentifié
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Navbar avec bouton pour ouvrir/fermer la sidebar */}
-      <Navbar onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
+      {/* Navbar avec Z-index élevé pour passer au-dessus de la sidebar */}
+      <div className="relative z-50">
+        <Navbar onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
+      </div>
 
       <div className="flex-1 flex relative">
-        {/* Sidebar avec navigation du dashboard */}
-        <DashboardSidebar 
-          isOpen={isSidebarOpen} 
-          onClose={() => setIsSidebarOpen(false)} 
-          user={{
-            role: session.user.role,
-            name: session.user.name
-          }}
-        />
+        {/* Sidebar avec Z-index inférieur à la navbar */}
+        <div className="relative z-30">
+          <DashboardSidebar 
+            isOpen={isSidebarOpen} 
+            onClose={() => setIsSidebarOpen(false)} 
+            user={{
+              role: session.user.role,
+              name: session.user.name
+            }}
+          />
+        </div>
         
-        {/* Bouton pour basculer la sidebar - redesigné et repositionné */}
+        {/* Bouton pour basculer la sidebar - avec Z-index approprié */}
         <button
           className={cn(
-            "fixed z-50 flex items-center justify-center rounded-md shadow-md border border-gray-200 w-6 h-24 transition-all duration-300",
+            "fixed z-40 flex items-center justify-center rounded-md shadow-md border border-gray-200 w-6 h-24 transition-all duration-300",
             isSidebarOpen 
               ? "left-64 -ml-3 top-1/2 -translate-y-1/2 hover:bg-primary/10 bg-white" 
-              : "left-0 ml-0 top-1/2 -translate-y-1/2 hover:bg-primary/10 bg-lavender-light text-primary rounded-l-none border-l-0"
+              : "left-0 ml-0 top-1/2 -translate-y-1/2 hover:bg-primary/10 bg-lavender-light text-primary rounded-l-none border-l-0",
+            // Ajuster la position pour éviter la navbar
+            "mt-16"
           )}
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           aria-label={isSidebarOpen ? "Fermer le menu" : "Ouvrir le menu"}
@@ -102,7 +108,9 @@ export default function DashboardLayout({
         <main 
           className={cn(
             "flex-1 transition-all duration-300 ease-in-out",
-            isSidebarOpen ? 'lg:pl-64' : 'pl-10'
+            isSidebarOpen ? 'lg:pl-64' : 'pl-10',
+            // Ajouter padding-top pour compenser la navbar
+            "pt-0"
           )}
         >
           {children}
