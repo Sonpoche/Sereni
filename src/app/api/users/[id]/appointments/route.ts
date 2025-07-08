@@ -50,23 +50,110 @@ export async function GET(
       },
       include: {
         client: {
-            select: {
-              id: true,
-              phone: true,
-              user: {
-                select: {
-                  name: true,
-                  email: true,
-                }
+          select: {
+            id: true,
+            phone: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
               }
             }
-          },
+          }
+        },
         service: true,
       },
       orderBy: { startTime: 'asc' }
     })
+
+    // Récupérer les sessions de cours collectifs
+    const groupSessions = await prisma.groupSession.findMany({
+      where: {
+        groupClass: {
+          professionalId: professional.id
+        }
+      },
+      include: {
+        groupClass: {
+          select: {
+            id: true,
+            name: true,
+            maxParticipants: true,
+            category: true,
+            isOnline: true,
+            city: true
+          }
+        },
+        registrations: {
+          where: {
+            status: { not: "CANCELLED" }
+          },
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: {
+                    name: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { startTime: 'asc' }
+    })
+
+    // Convertir les sessions de cours collectifs au format des rendez-vous pour le calendrier
+    const groupClassAppointments = groupSessions.map(session => ({
+      id: `group-${session.id}`,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      status: session.status === "SCHEDULED" ? "CONFIRMED" : session.status,
+      notes: session.notes,
+      isGroupClass: true,
+      groupClassData: {
+        sessionId: session.id,
+        groupClassId: session.groupClass.id,
+        name: session.groupClass.name,
+        maxParticipants: session.groupClass.maxParticipants,
+        currentParticipants: session.registrations.length,
+        category: session.groupClass.category,
+        isOnline: session.groupClass.isOnline,
+        city: session.groupClass.city,
+        registrations: session.registrations.map(reg => ({
+          id: reg.id,
+          status: reg.status,
+          registeredAt: reg.registeredAt,
+          client: {
+            id: reg.client.id,
+            phone: reg.client.phone,
+            user: {
+              name: reg.client.user.name,
+              email: reg.client.user.email
+            }
+          }
+        }))
+      },
+      // Format compatible avec le calendrier existant
+      client: null,
+      service: {
+        id: `group-service-${session.groupClass.id}`,
+        name: session.groupClass.name,
+        duration: (new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 60000, // en minutes
+        price: 0, // Prix géré au niveau du cours collectif
+        color: "#10B981" // Couleur verte pour les cours collectifs
+      }
+    }))
+
+    // Combiner les rendez-vous individuels et les cours collectifs
+    const allAppointments = [
+      ...appointments.map(apt => ({ ...apt, isGroupClass: false })),
+      ...groupClassAppointments
+    ].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
     
-    return NextResponse.json(appointments)
+    return NextResponse.json(allAppointments)
   } catch (error) {
     console.error("Erreur dans GET /api/users/[id]/appointments:", error)
     return NextResponse.json(
@@ -135,7 +222,7 @@ export async function POST(
       endTime.setMinutes(endTime.getMinutes() + professional.bufferTime)
     }
     
-    // Vérifier s'il existe des rendez-vous qui chevauchent cette plage horaire
+    // Vérifier s'il existe des rendez-vous individuels qui chevauchent cette plage horaire
     const overlappingAppointments = await prisma.booking.findMany({
       where: {
         professionalId: professional.id,
@@ -167,13 +254,38 @@ export async function POST(
         status: { not: BookingStatus.CANCELLED }
       }
     })
+
+    // Vérifier s'il existe des sessions de cours collectifs qui chevauchent
+    const overlappingGroupSessions = await prisma.groupSession.findMany({
+      where: {
+        groupClass: {
+          professionalId: professional.id
+        },
+        OR: [
+          {
+            startTime: { lte: startTime },
+            endTime: { gt: startTime }
+          },
+          {
+            startTime: { lt: endTime },
+            endTime: { gte: endTime }
+          },
+          {
+            startTime: { gte: startTime },
+            endTime: { lte: endTime }
+          }
+        ],
+        status: { not: "CANCELLED" }
+      }
+    })
     
-    // Si des rendez-vous chevauchants sont trouvés, retourner une erreur
-    if (overlappingAppointments.length > 0) {
+    // Si des rendez-vous ou cours collectifs chevauchants sont trouvés, retourner une erreur
+    if (overlappingAppointments.length > 0 || overlappingGroupSessions.length > 0) {
+      const conflictType = overlappingAppointments.length > 0 ? "rendez-vous" : "cours collectif"
       return NextResponse.json(
         { 
           error: "Conflit d'horaire", 
-          message: "Un ou plusieurs rendez-vous existants chevauchent cette plage horaire. Veuillez sélectionner un autre créneau."
+          message: `Un ${conflictType} existant chevauche cette plage horaire. Veuillez sélectionner un autre créneau.`
         },
         { status: 409 } // 409 Conflict
       )
@@ -196,17 +308,17 @@ export async function POST(
       },
       include: {
         client: {
-            select: {
-              id: true,
-              phone: true,
-              user: {
-                select: {
-                  name: true,
-                  email: true,
-                }
+          select: {
+            id: true,
+            phone: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
               }
             }
-          },
+          }
+        },
         service: true,
       },
     })

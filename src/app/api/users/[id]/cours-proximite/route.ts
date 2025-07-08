@@ -59,6 +59,9 @@ export async function GET(
       }
     }
 
+    // Date actuelle pour filtrer les séances passées
+    const now = new Date()
+
     // Vérifier si le nouveau système existe
     let useNewSystem = true;
     try {
@@ -70,9 +73,18 @@ export async function GET(
     let groupClasses: any[] = [];
 
     if (useNewSystem) {
-      // NOUVEAU SYSTÈME : Utiliser GroupClass
+      // NOUVEAU SYSTÈME : Utiliser GroupClass - FILTRER par dates futures
       groupClasses = await prisma.groupClass.findMany({
-        where: { active: true },
+        where: { 
+          active: true,
+          // IMPORTANT : Ne récupérer que les cours qui ont au moins une séance future
+          sessions: {
+            some: {
+              startTime: { gte: now },
+              status: "SCHEDULED"
+            }
+          }
+        },
         include: {
           professional: {
             include: {
@@ -81,15 +93,19 @@ export async function GET(
               }
             }
           },
+          // IMPORTANT : Ne récupérer que les séances futures
           sessions: {
             where: {
-              startTime: { gte: new Date() },
+              startTime: { gte: now },
               status: "SCHEDULED"
             },
             orderBy: { startTime: 'asc' },
             take: 3,
             include: {
               registrations: {
+                where: {
+                  status: { not: "CANCELLED" }
+                },
                 select: { id: true }
               }
             }
@@ -97,11 +113,12 @@ export async function GET(
         }
       })
     } else {
-      // ANCIEN SYSTÈME : Utiliser Booking avec isGroupClass
+      // ANCIEN SYSTÈME : Utiliser Booking avec isGroupClass - FILTRER par dates futures
       const existingGroupClasses = await prisma.booking.findMany({
         where: {
           isGroupClass: true,
-          startTime: { gte: new Date() },
+          // IMPORTANT : Ne récupérer que les cours futurs
+          startTime: { gte: now },
           status: { not: "CANCELLED" }
         },
         include: {
@@ -130,7 +147,7 @@ export async function GET(
         maxParticipants: booking.maxParticipants,
         isOnline: false,
         city: booking.professional.city || '',
-        postalCode: booking.professional.postalCode || '', // AJOUT de cette ligne
+        postalCode: booking.professional.postalCode || '',
         latitude: booking.professional.latitude,
         longitude: booking.professional.longitude,
         professional: booking.professional,
@@ -142,11 +159,11 @@ export async function GET(
       }))
     }
 
-    // Si aucun cours collectif n'existe
+    // Si aucun cours collectif avec séances futures n'existe
     if (groupClasses.length === 0) {
       return NextResponse.json({
         courses: [],
-        message: "Aucun cours collectif n'est disponible pour le moment.",
+        message: "Aucun cours collectif avec des séances à venir n'est disponible pour le moment.",
         clientLocation: { city: client.city, distance: client.maxDistance || 25 }
       })
     }
@@ -226,20 +243,28 @@ export async function GET(
       }
 
       if (showClass) {
+        // Calculer les places disponibles en fonction des séances futures uniquement
+        const availablePlaces = useNewSystem 
+          ? groupClass.sessions.reduce((total: number, session: any) => {
+              return total + (groupClass.maxParticipants - session.registrations.length)
+            }, 0)
+          : groupClass.maxParticipants - (groupClass.sessions[0]?.registrations?.length || 0)
+
         nearbyClasses.push({
           ...groupClass,
           distance: distance ? Math.round(distance * 10) / 10 : null,
-          availablePlaces: useNewSystem 
-            ? groupClass.sessions.reduce((total: number, session: any) => {
-                return total + (groupClass.maxParticipants - session.registrations.length)
-              }, 0)
-            : groupClass.maxParticipants - (groupClass.sessions[0]?.registrations?.length || 0)
+          availablePlaces
         })
       }
     }
 
-    // Trier par distance (cours sans distance à la fin)
+    // Trier par distance (cours en ligne en premier, puis par distance croissante)
     nearbyClasses.sort((a, b) => {
+      // Cours en ligne en premier
+      if (a.isOnline && !b.isOnline) return -1
+      if (!a.isOnline && b.isOnline) return 1
+      
+      // Ensuite par distance
       if (a.distance === null && b.distance === null) return 0
       if (a.distance === null) return 1
       if (b.distance === null) return -1
@@ -248,7 +273,11 @@ export async function GET(
 
     return NextResponse.json({
       courses: nearbyClasses.slice(0, 6), // Limiter à 6 cours
-      clientLocation: { city: client.city, distance: maxDistance }
+      clientLocation: { 
+        city: client.city, 
+        distance: maxDistance,
+        hasCoordinates: !!(clientLat && clientLng)
+      }
     })
 
   } catch (error) {
