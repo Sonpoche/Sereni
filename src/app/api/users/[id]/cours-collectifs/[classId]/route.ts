@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma/client"
 import { auth } from "@/lib/auth/auth.config"
 import { z } from "zod"
 import { geocodeAddress } from "@/lib/utils/geocoding"
+import { sendEmail } from "@/lib/emails/send-email"
 
 const groupClassSchema = z.object({
   name: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
@@ -110,7 +111,7 @@ export async function PATCH(
   }
 }
 
-// DELETE - Supprimer un cours collectif
+// DELETE - Supprimer un cours collectif avec gestion des notifications
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string; classId: string } }
@@ -121,11 +122,23 @@ export async function DELETE(
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    console.log(`🗑️ Tentative de suppression du cours ${params.classId} par l'utilisateur ${params.id}`)
+    // Récupérer les paramètres de la requête
+    const { searchParams } = new URL(request.url)
+    const forceDelete = searchParams.get('force') === 'true'
+    const sendNotifications = searchParams.get('notify') !== 'false' // par défaut true
 
-    // Récupérer le profil professionnel
+    console.log(`🗑️ Tentative de suppression du cours ${params.classId} par l'utilisateur ${params.id}`)
+    console.log(`   Force: ${forceDelete}, Notifications: ${sendNotifications}`)
+
+    // Récupérer le profil professionnel avec ses paramètres de notification
     const professional = await prisma.professional.findUnique({
-      where: { userId: session.user.id }
+      where: { userId: session.user.id },
+      include: {
+        user: {
+          select: { name: true, email: true }
+        },
+        notifications: true
+      }
     })
 
     if (!professional) {
@@ -141,7 +154,20 @@ export async function DELETE(
       include: {
         sessions: {
           include: {
-            registrations: true
+            registrations: {
+              where: {
+                status: { not: "CANCELLED" }
+              },
+              include: {
+                client: {
+                  include: {
+                    user: {
+                      select: { name: true, email: true }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -154,27 +180,115 @@ export async function DELETE(
 
     console.log(`✅ Cours collectif trouvé: ${groupClass.name}`)
 
-    // Vérifier s'il y a des inscriptions actives
+    // Compter les inscriptions actives
     const activeRegistrations = groupClass.sessions.reduce((total, session) => {
-      return total + session.registrations.filter(reg => reg.status !== 'CANCELLED').length
+      return total + session.registrations.length
     }, 0)
 
-    if (activeRegistrations > 0) {
+    console.log(`📊 Inscriptions actives trouvées: ${activeRegistrations}`)
+
+    // Si il y a des inscriptions actives et qu'on ne force pas la suppression
+    if (activeRegistrations > 0 && !forceDelete) {
       return NextResponse.json({ 
-        error: "Impossible de supprimer ce cours collectif car il y a des inscriptions actives" 
+        error: "Impossible de supprimer ce cours collectif car il y a des inscriptions actives",
+        activeRegistrations,
+        needsConfirmation: true,
+        participants: groupClass.sessions.flatMap(session => 
+          session.registrations.map(reg => ({
+            name: reg.client.user.name,
+            email: reg.client.user.email,
+            sessionDate: session.startTime
+          }))
+        )
       }, { status: 409 })
     }
 
-    // Supprimer le cours collectif (les sessions et inscriptions seront supprimées automatiquement grâce à onDelete: Cascade)
+    // Collecter tous les participants à notifier
+    const participantsToNotify = []
+    if (sendNotifications) {
+      for (const session of groupClass.sessions) {
+        for (const registration of session.registrations) {
+          participantsToNotify.push({
+            name: registration.client.user.name,
+            email: registration.client.user.email,
+            sessionDate: session.startTime
+          })
+        }
+      }
+    }
+
+    // Supprimer le cours collectif (les sessions et inscriptions seront supprimées automatiquement)
     await prisma.groupClass.delete({
       where: { id: params.classId }
     })
 
     console.log(`✅ Cours collectif ${params.classId} supprimé avec succès`)
 
+    // Envoyer les notifications par email aux participants
+    let notificationsSent = 0
+    if (sendNotifications && participantsToNotify.length > 0) {
+      // Vérifier si les notifications d'annulation sont activées
+      const notificationsEnabled = professional.notifications?.emailEnabled && 
+                                  professional.notifications?.cancelationNotifications
+      
+      if (notificationsEnabled) {
+        console.log(`📧 Envoi des notifications à ${participantsToNotify.length} participants`)
+        
+        try {
+          const emailPromises = participantsToNotify.map(async (participant) => {
+            try {
+              // Utiliser la raison d'annulation personnalisée ou celle par défaut
+              const cancelationReason = professional.notifications?.defaultCancelationReason || 
+                                      "Le cours collectif a été supprimé par le professionnel"
+              
+              // Préparer la signature email personnalisée
+              const emailSignature = professional.notifications?.emailSignature || 
+                                    `Cordialement,\n${professional.user.name || 'Votre professionnel'}`
+              
+              await sendEmail({
+                to: participant.email || 'participant@example.com',
+                subject: `Annulation du cours collectif "${groupClass.name}"`,
+                template: 'course-cancellation',
+                data: {
+                  participantName: participant.name || 'Participant',
+                  courseName: groupClass.name,
+                  professionalName: professional.user.name || 'Professionnel',
+                  sessionDate: new Date(participant.sessionDate).toLocaleDateString('fr-FR', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }),
+                  reason: cancelationReason,
+                  contactEmail: professional.user.email || 'contact@votre-domaine.com',
+                  emailSignature: emailSignature
+                }
+              })
+              notificationsSent++
+              console.log(`✅ Email envoyé à ${participant.name} (${participant.email})`)
+            } catch (emailError) {
+              console.error(`❌ Erreur envoi email à ${participant.email}:`, emailError)
+              // On continue même si un email échoue
+            }
+          })
+          
+          await Promise.allSettled(emailPromises)
+          console.log(`✅ ${notificationsSent}/${participantsToNotify.length} notifications envoyées`)
+        } catch (emailError) {
+          console.error("❌ Erreur lors de l'envoi des notifications:", emailError)
+          // On continue malgré l'erreur d'email
+        }
+      } else {
+        console.log(`📧 Notifications désactivées dans les paramètres pour l'utilisateur ${params.id}`)
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Cours collectif supprimé avec succès"
+      message: "Cours collectif supprimé avec succès",
+      notificationsSent: notificationsSent
     })
 
   } catch (error) {

@@ -5,21 +5,22 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, Plus, Clock } from "lucide-react"
+import { Loader2, Plus, Clock, Users, Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 import AppointmentCalendar from "@/components/appointments/appointment-calendar"
 import { AppointmentForm } from "@/components/appointments/appointment-form"
 import AppointmentDetails from "@/components/appointments/appointment-details"
 import CalendarHeader from "@/components/appointments/calendar-header"
 import { BlockTimeForm } from "@/components/appointments/block-time-form"
+import { Badge } from "@/components/ui/badge"
 
 export default function RendezVousPage() {
   const { data: session, status } = useSession()
   const [loading, setLoading] = useState(true)
-  const [appointments, setAppointments] = useState([])
-  const [clients, setClients] = useState([])
-  const [services, setServices] = useState([])
-  const [availability, setAvailability] = useState([])
+  const [appointments, setAppointments] = useState<any[]>([])
+  const [clients, setClients] = useState<any[]>([])
+  const [services, setServices] = useState<any[]>([])
+  const [availability, setAvailability] = useState<any[]>([])
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -30,6 +31,9 @@ export default function RendezVousPage() {
   const [blockTimeDefaultValues, setBlockTimeDefaultValues] = useState<any | null>(null)
   const calendarRef = useRef<any>(null)
   const [isUpdatingDate, setIsUpdatingDate] = useState(false)
+  
+  // Nouveaux états pour les cours collectifs
+  const [showGroupClasses, setShowGroupClasses] = useState(true)
 
   // Charger les données initiales
   useEffect(() => {
@@ -39,25 +43,78 @@ export default function RendezVousPage() {
       try {
         setLoading(true)
         
-        // Charger les rendez-vous
-        const appointmentsResponse = await fetch(`/api/users/${session.user.id}/appointments`)
-        if (!appointmentsResponse.ok) {
+        // Charger les rendez-vous individuels ET les cours collectifs en parallèle
+        const [appointmentsRes, groupClassesRes, clientsRes, servicesRes, availabilityRes] = await Promise.all([
+          fetch(`/api/users/${session.user.id}/appointments`),
+          fetch(`/api/users/${session.user.id}/cours-collectifs`),
+          fetch(`/api/users/${session.user.id}/clients`),
+          fetch(`/api/users/${session.user.id}/services`),
+          fetch(`/api/users/${session.user.id}/availability`)
+        ])
+        
+        if (!appointmentsRes.ok) {
           throw new Error("Erreur lors du chargement des rendez-vous")
         }
-        const appointmentsData = await appointmentsResponse.json()
-        setAppointments(appointmentsData)
+        
+        const appointmentsData = await appointmentsRes.json()
+        
+        // Traitement des cours collectifs
+        let groupSessionsAsAppointments = []
+        if (groupClassesRes.ok) {
+          const groupClassesData = await groupClassesRes.json()
+          
+          // Transformer les sessions de cours collectifs en format rendez-vous
+          groupSessionsAsAppointments = groupClassesData.flatMap((groupClass: any) => 
+            groupClass.sessions
+              .filter((session: any) => new Date(session.startTime) > new Date()) // Seulement les futures
+              .map((session: any) => ({
+                id: `group-${session.id}`,
+                startTime: session.startTime,
+                endTime: session.endTime,
+                status: session.status === "SCHEDULED" ? "CONFIRMED" : session.status,
+                notes: session.notes,
+                isGroupClass: true,
+                groupClassData: {
+                  sessionId: session.id,
+                  groupClassId: groupClass.id,
+                  name: groupClass.name,
+                  maxParticipants: groupClass.maxParticipants,
+                  currentParticipants: session.currentParticipants,
+                  category: groupClass.category,
+                  isOnline: groupClass.isOnline,
+                  city: groupClass.city,
+                  price: groupClass.price
+                },
+                // Format compatible avec le calendrier existant
+                client: null,
+                service: {
+                  id: `group-service-${groupClass.id}`,
+                  name: groupClass.name,
+                  duration: groupClass.duration,
+                  price: groupClass.price,
+                  color: "#10B981" // Couleur verte pour les cours collectifs
+                }
+              }))
+          )
+        }
+        
+        // Combiner tous les rendez-vous
+        const allAppointments = [
+          ...appointmentsData.filter((apt: any) => !apt.isGroupClass), // Rendez-vous individuels
+          ...(showGroupClasses ? groupSessionsAsAppointments : []) // Cours collectifs si activés
+        ].sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+        
+        setAppointments(allAppointments)
         
         // Charger les clients
-        const clientsResponse = await fetch(`/api/users/${session.user.id}/clients`)
-        if (clientsResponse.ok) {
-          const clientsData = await clientsResponse.json()
+        if (clientsRes.ok) {
+          const clientsData = await clientsRes.json()
           setClients(clientsData)
         }
         
         // Charger les services
-        const servicesResponse = await fetch(`/api/users/${session.user.id}/services`)
-        if (servicesResponse.ok) {
-          const servicesData = await servicesResponse.json()
+        if (servicesRes.ok) {
+          const servicesData = await servicesRes.json()
           // Filtrer le service de blocage des plages
           const filteredServices = servicesData.filter((service: any) => 
             service.name !== "Blocage de plage" && service.active !== false
@@ -66,9 +123,8 @@ export default function RendezVousPage() {
         }
         
         // Charger les disponibilités
-        const availabilityResponse = await fetch(`/api/users/${session.user.id}/availability`)
-        if (availabilityResponse.ok) {
-          const availabilityData = await availabilityResponse.json()
+        if (availabilityRes.ok) {
+          const availabilityData = await availabilityRes.json()
           setAvailability(availabilityData.timeSlots || [])
         }
       } catch (error) {
@@ -82,53 +138,151 @@ export default function RendezVousPage() {
     if (session?.user?.id) {
       fetchInitialData()
     }
-  }, [session])
+  }, [session, showGroupClasses])
 
   // Rafraîchir les rendez-vous
   const refreshAppointments = useCallback(async () => {
     if (!session?.user?.id) return
     
     try {
-      const response = await fetch(`/api/users/${session.user.id}/appointments`)
-      if (!response.ok) {
+      const [appointmentsRes, groupClassesRes] = await Promise.all([
+        fetch(`/api/users/${session.user.id}/appointments`),
+        fetch(`/api/users/${session.user.id}/cours-collectifs`)
+      ])
+      
+      if (!appointmentsRes.ok) {
         throw new Error("Erreur lors du rafraîchissement des rendez-vous")
       }
-      const data = await response.json()
-      setAppointments(data)
+      
+      const appointmentsData = await appointmentsRes.json()
+      
+      // Traitement des cours collectifs
+      let groupSessionsAsAppointments = []
+      if (groupClassesRes.ok) {
+        const groupClassesData = await groupClassesRes.json()
+        
+        groupSessionsAsAppointments = groupClassesData.flatMap((groupClass: any) => 
+          groupClass.sessions
+            .filter((session: any) => new Date(session.startTime) > new Date())
+            .map((session: any) => ({
+              id: `group-${session.id}`,
+              startTime: session.startTime,
+              endTime: session.endTime,
+              status: session.status === "SCHEDULED" ? "CONFIRMED" : session.status,
+              notes: session.notes,
+              isGroupClass: true,
+              groupClassData: {
+                sessionId: session.id,
+                groupClassId: groupClass.id,
+                name: groupClass.name,
+                maxParticipants: groupClass.maxParticipants,
+                currentParticipants: session.currentParticipants,
+                category: groupClass.category,
+                isOnline: groupClass.isOnline,
+                city: groupClass.city,
+                price: groupClass.price
+              },
+              client: null,
+              service: {
+                id: `group-service-${groupClass.id}`,
+                name: groupClass.name,
+                duration: groupClass.duration,
+                price: groupClass.price,
+                color: "#10B981"
+              }
+            }))
+        )
+      }
+      
+      const allAppointments = [
+        ...appointmentsData.filter((apt: any) => !apt.isGroupClass),
+        ...(showGroupClasses ? groupSessionsAsAppointments : [])
+      ].sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+      
+      setAppointments(allAppointments)
     } catch (error) {
       console.error("Erreur:", error)
       toast.error("Erreur lors du rafraîchissement des rendez-vous")
     }
-  }, [session])
+  }, [session, showGroupClasses])
+
+  // Fonction pour vérifier les conflits d'horaires
+  const checkTimeConflict = (newStart: Date, newEnd: Date, excludeId?: string) => {
+    return appointments.some((apt: any) => {
+      if (excludeId && apt.id === excludeId) return false
+      
+      const aptStart = new Date(apt.startTime)
+      const aptEnd = new Date(apt.endTime)
+      
+      // Vérifier le chevauchement
+      return (
+        (newStart >= aptStart && newStart < aptEnd) ||
+        (newEnd > aptStart && newEnd <= aptEnd) ||
+        (newStart <= aptStart && newEnd >= aptEnd)
+      )
+    })
+  }
+
+  // Fonction pour supprimer une séance de cours collectif
+  const handleDeleteGroupSession = async (sessionId: string, groupClassId: string) => {
+    if (!session?.user?.id) return
+    
+    try {
+      const response = await fetch(
+        `/api/users/${session.user.id}/cours-collectifs/${groupClassId}/sessions/${sessionId}`, 
+        { method: "DELETE" }
+      )
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Erreur lors de la suppression")
+      }
+      
+      const result = await response.json()
+      
+      // Recharger les rendez-vous
+      await refreshAppointments()
+      
+      if (result.notificationsSent > 0) {
+        toast.success(`Séance supprimée. ${result.notificationsSent} participant(s) notifié(s).`)
+      } else {
+        toast.success("Séance supprimée avec succès")
+      }
+      
+      // Fermer le panneau de détails si c'était la séance sélectionnée
+      if (selectedAppointment?.id === `group-${sessionId}`) {
+        setSelectedAppointment(null)
+      }
+      
+    } catch (error) {
+      console.error("Erreur:", error)
+      toast.error((error as Error).message || "Erreur lors de la suppression")
+    }
+  }
 
   // Navigation du calendrier
   const handlePrevious = useCallback(() => {
     if (calendarRef.current) {
       calendarRef.current.prev()
-      // La mise à jour de currentDate sera gérée par onDateNavigate via datesSet
     }
   }, [])
 
   const handleNext = useCallback(() => {
     if (calendarRef.current) {
       calendarRef.current.next()
-      // La mise à jour de currentDate sera gérée par onDateNavigate via datesSet
     }
   }, [])
 
   const handleToday = useCallback(() => {
     if (calendarRef.current) {
       calendarRef.current.today()
-      // La mise à jour de currentDate sera gérée par onDateNavigate via datesSet
     }
   }, [])
 
   const handleDateNavigate = useCallback((date: Date) => {
-    // Vérifier si la date a réellement changé pour éviter les mises à jour inutiles
     if (!isUpdatingDate && date.getTime() !== currentDate.getTime()) {
       setIsUpdatingDate(true)
       setCurrentDate(date)
-      // Réinitialiser le flag après un court délai
       setTimeout(() => {
         setIsUpdatingDate(false)
       }, 50)
@@ -154,17 +308,14 @@ export default function RendezVousPage() {
     }
   }, [appointments])
 
-  // Gestion des formulaires
+  // Gestion des formulaires - code existant inchangé
   const handleAppointmentSubmit = async (data: any) => {
     try {
-      // Cloner les données pour éviter de modifier l'original
       const formData = { ...data };
       
-      // Vérifier si c'est un cours collectif
       if (formData.isGroupClass) {
         console.log("Création d'un cours collectif avec les données:", formData);
         
-        // Préparer les données spécifiquement pour l'API des cours collectifs
         const groupClassData = {
           serviceId: formData.serviceId,
           date: formData.date,
@@ -176,7 +327,6 @@ export default function RendezVousPage() {
         
         console.log("Données formatées pour l'API des cours collectifs:", groupClassData);
         
-        // Pour les cours collectifs, nous utilisons une API différente
         const response = await fetch(`/api/users/${session?.user?.id}/group-classes`, {
           method: "POST",
           headers: {
@@ -197,7 +347,6 @@ export default function RendezVousPage() {
             throw error;
           }
           
-          // Afficher les détails de validation si disponibles
           if (responseData.details && Array.isArray(responseData.details)) {
             console.error("Détails de validation:", responseData.details);
             const errorMessages = responseData.details.map((err: any) => 
@@ -216,7 +365,6 @@ export default function RendezVousPage() {
         toast.success("Cours collectif créé avec succès");
         return Promise.resolve();
       } else {
-        // Rendez-vous normal - code inchangé
         const response = await fetch(`/api/users/${session?.user?.id}/appointments`, {
           method: "POST",
           headers: {
@@ -245,13 +393,12 @@ export default function RendezVousPage() {
       }
     } catch (error) {
       console.error("Erreur lors de l'enregistrement du rendez-vous:", error);
-      // Afficher l'erreur à l'utilisateur
       toast.error(error instanceof Error ? error.message : "Erreur lors de la création du rendez-vous");
       return Promise.reject(error);
     }
   };
 
-  // Gestion du blocage de plage horaire
+  // Gestion du blocage de plage horaire - code existant inchangé
   const handleBlockTimeSubmit = async (data: any) => {
     try {
       const response = await fetch(`/api/users/${session?.user?.id}/blocked-times`, {
@@ -262,14 +409,12 @@ export default function RendezVousPage() {
         body: JSON.stringify(data),
       })
 
-      // Vérifier le statut HTTP
       if (!response.ok) {
         const errorData = await response.json();
         
-        // Cas spécifique pour les conflits (status 409)
         if (response.status === 409) {
           const error = new Error(errorData.message || "Ce créneau chevauche un rendez-vous ou une plage bloquée existante");
-          // @ts-ignore - Ajout de propriétés personnalisées
+          // @ts-ignore
           error.status = 409;
           error.message = errorData.message;
           throw error;
@@ -288,7 +433,7 @@ export default function RendezVousPage() {
     }
   }
 
-  // Actions sur les rendez-vous
+  // Actions sur les rendez-vous - code existant inchangé mais avec gestion des cours collectifs
   const handleCancelAppointment = async () => {
     if (!selectedAppointment) return
     
@@ -339,6 +484,16 @@ export default function RendezVousPage() {
     if (!selectedAppointment) return
     
     try {
+      // Si c'est un cours collectif, utiliser la fonction spécifique
+      if (selectedAppointment.isGroupClass) {
+        await handleDeleteGroupSession(
+          selectedAppointment.groupClassData.sessionId,
+          selectedAppointment.groupClassData.groupClassId
+        )
+        return
+      }
+      
+      // Sinon, suppression normale d'un rendez-vous
       const response = await fetch(`/api/users/${session?.user?.id}/appointments/${selectedAppointment.id}`, {
         method: "DELETE",
       })
@@ -382,41 +537,57 @@ export default function RendezVousPage() {
     <div className="container mx-auto py-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-title font-medium">Gestion des rendez-vous</h1>
-        <div className="flex space-x-2">
-          <Button 
-            variant="outline"
-            onClick={() => {
-              if (selectedDate) {
-                setBlockTimeDefaultValues({
-                  date: selectedDate.toISOString().split('T')[0],
-                  startTime: selectedDate.toTimeString().substring(0, 5),
-                  endTime: new Date(selectedDate.getTime() + 60 * 60 * 1000).toTimeString().substring(0, 5),
-                  title: "Absence",
-                })
-              } else {
-                setBlockTimeDefaultValues({
-                  date: new Date().toISOString().split('T')[0],
-                  startTime: "09:00",
-                  endTime: "10:00",
-                  title: "Absence",
-                })
-              }
-              setIsBlockTimeFormOpen(true)
-            }}
-          >
-            <Clock className="mr-2 h-4 w-4" />
-            Bloquer une plage
-          </Button>
-          <Button 
-            onClick={() => {
-              setSelectedAppointment(null)
-              setFormDefaultValues(null)
-              setIsFormOpen(true)
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Nouveau rendez-vous
-          </Button>
+        <div className="flex items-center space-x-4">
+          {/* Toggle pour les cours collectifs */}
+          <div className="flex items-center space-x-2">
+            <Button
+              variant={showGroupClasses ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowGroupClasses(!showGroupClasses)}
+              className="gap-2"
+            >
+              {showGroupClasses ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              <Users className="h-4 w-4" />
+              Cours collectifs
+            </Button>
+          </div>
+          
+          <div className="flex space-x-2">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                if (selectedDate) {
+                  setBlockTimeDefaultValues({
+                    date: selectedDate.toISOString().split('T')[0],
+                    startTime: selectedDate.toTimeString().substring(0, 5),
+                    endTime: new Date(selectedDate.getTime() + 60 * 60 * 1000).toTimeString().substring(0, 5),
+                    title: "Absence",
+                  })
+                } else {
+                  setBlockTimeDefaultValues({
+                    date: new Date().toISOString().split('T')[0],
+                    startTime: "09:00",
+                    endTime: "10:00",
+                    title: "Absence",
+                  })
+                }
+                setIsBlockTimeFormOpen(true)
+              }}
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              Bloquer une plage
+            </Button>
+            <Button 
+              onClick={() => {
+                setSelectedAppointment(null)
+                setFormDefaultValues(null)
+                setIsFormOpen(true)
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nouveau rendez-vous
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -461,9 +632,9 @@ export default function RendezVousPage() {
               {selectedAppointment ? (
                 <AppointmentDetails 
                   appointment={selectedAppointment}
-                  onEdit={handleEditAppointment}
-                  onCancel={handleCancelAppointment}
-                  onComplete={handleCompleteAppointment}
+                  onEdit={selectedAppointment.isGroupClass ? () => {} : handleEditAppointment}
+                  onCancel={selectedAppointment.isGroupClass ? async () => {} : handleCancelAppointment}
+                  onComplete={selectedAppointment.isGroupClass ? async () => {} : handleCompleteAppointment}
                   onDelete={handleDeleteAppointment}
                 />
               ) : (

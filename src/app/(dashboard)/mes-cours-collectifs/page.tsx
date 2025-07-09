@@ -1,4 +1,4 @@
-// src/app/(dashboard)/mes-cours-collectifs/page.tsx (pour les professionnels)
+// src/app/(dashboard)/mes-cours-collectifs/page.tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -11,6 +11,7 @@ import { format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import { GroupClassForm, type GroupClassFormData } from "@/components/group-classes/group-class-form"
 import { GroupSessionForm, type SessionFormData } from "@/components/group-classes/group-session-form"
 import {
@@ -57,6 +58,14 @@ export default function MesCoursCollectifsPage() {
   const [isSessionFormOpen, setIsSessionFormOpen] = useState(false)
   const [selectedClass, setSelectedClass] = useState<GroupClass | null>(null)
   const [editingClass, setEditingClass] = useState<GroupClass | null>(null)
+  
+  // Nouveaux états pour les confirmations
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [selectedForDelete, setSelectedForDelete] = useState<{
+    type: 'course' | 'session'
+    item: any
+    participants?: any[]
+  }>({ type: 'course', item: null })
 
   // Charger les cours collectifs
   useEffect(() => {
@@ -153,25 +162,90 @@ export default function MesCoursCollectifsPage() {
     }
   }
 
-  // Supprimer un cours collectif
-  const handleDeleteGroupClass = async (groupClass: GroupClass) => {
+  // Supprimer un cours collectif avec confirmation améliorée
+  const handleDeleteGroupClass = async (groupClass: GroupClass, force = false) => {
     if (!session?.user?.id) return
     
     try {
-      const response = await fetch(`/api/users/${session.user.id}/cours-collectifs/${groupClass.id}`, {
+      const url = force 
+        ? `/api/users/${session.user.id}/cours-collectifs/${groupClass.id}?force=true`
+        : `/api/users/${session.user.id}/cours-collectifs/${groupClass.id}`
+      
+      const response = await fetch(url, {
         method: "DELETE",
       })
       
       if (!response.ok) {
-        throw new Error("Erreur lors de la suppression du cours collectif")
+        const errorData = await response.json()
+        
+        // Si il y a des inscriptions actives, demander confirmation
+        if (response.status === 409 && errorData.needsConfirmation) {
+          setSelectedForDelete({
+            type: 'course',
+            item: groupClass,
+            participants: errorData.participants
+          })
+          setDeleteDialogOpen(true)
+          return
+        }
+        
+        throw new Error(errorData.error || "Erreur lors de la suppression du cours collectif")
       }
+      
+      const result = await response.json()
       
       setGroupClasses(prev => prev.filter(c => c.id !== groupClass.id))
       
-      toast.success("Cours collectif supprimé avec succès")
+      // Afficher le message de succès avec le nombre de notifications envoyées
+      if (result.notificationsSent > 0) {
+        toast.success(`Cours collectif supprimé avec succès. ${result.notificationsSent} participant(s) notifié(s) par email.`)
+      } else {
+        toast.success("Cours collectif supprimé avec succès")
+      }
+      
     } catch (error) {
       console.error("Erreur:", error)
-      toast.error("Erreur lors de la suppression du cours collectif")
+      toast.error((error as Error).message || "Erreur lors de la suppression du cours collectif")
+    }
+  }
+
+  // Supprimer une séance avec confirmation
+  const handleDeleteSession = async (sessionId: string, groupClassId: string, courseName: string, force = false) => {
+    if (!session?.user?.id) return
+    
+    try {
+      const url = `/api/users/${session.user.id}/cours-collectifs/${groupClassId}/sessions/${sessionId}`
+      
+      const response = await fetch(url, {
+        method: "DELETE",
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Erreur lors de la suppression de la séance")
+      }
+      
+      const result = await response.json()
+      
+      // Mettre à jour la liste des cours
+      setGroupClasses(prev => 
+        prev.map(c => 
+          c.id === groupClassId 
+            ? { ...c, sessions: c.sessions.filter(s => s.id !== sessionId) }
+            : c
+        )
+      )
+      
+      // Afficher le message de succès avec le nombre de notifications envoyées
+      if (result.notificationsSent > 0) {
+        toast.success(`Séance supprimée avec succès. ${result.notificationsSent} participant(s) notifié(s) par email.`)
+      } else {
+        toast.success("Séance supprimée avec succès")
+      }
+      
+    } catch (error) {
+      console.error("Erreur:", error)
+      toast.error((error as Error).message || "Erreur lors de la suppression de la séance")
     }
   }
 
@@ -210,6 +284,78 @@ export default function MesCoursCollectifsPage() {
       throw error
     }
   }
+
+  // Composant de dialogue de confirmation amélioré
+  const ConfirmDeleteDialog = () => (
+    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-red-600">
+            {selectedForDelete.type === 'course' ? 'Supprimer le cours collectif' : 'Supprimer la séance'}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3">
+              <p>
+                {selectedForDelete.type === 'course' 
+                  ? `Êtes-vous sûr de vouloir supprimer le cours "${selectedForDelete.item?.name}" ?`
+                  : `Êtes-vous sûr de vouloir supprimer cette séance ?`
+                }
+              </p>
+              
+              {selectedForDelete.participants && selectedForDelete.participants.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm font-medium text-amber-800 mb-2">
+                    ⚠️ Participants inscrits ({selectedForDelete.participants.length})
+                  </p>
+                  <div className="h-32 w-full overflow-y-auto">
+                    <div className="space-y-2">
+                      {selectedForDelete.participants.map((participant, index) => (
+                        <div key={index} className="flex justify-between items-center text-xs bg-white rounded p-2">
+                          <span className="font-medium">{participant.name}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {new Date(participant.sessionDate).toLocaleDateString('fr-FR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator className="my-2" />
+                  <p className="text-xs text-amber-700">
+                    Ces participants seront automatiquement notifiés par email de l'annulation.
+                  </p>
+                </div>
+              )}
+              
+              <p className="text-sm text-red-600 font-medium">
+                Cette action est irréversible.
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (selectedForDelete.type === 'course') {
+                handleDeleteGroupClass(selectedForDelete.item, true)
+              } else {
+                handleDeleteSession(selectedForDelete.item.id, selectedForDelete.item.groupClassId, selectedForDelete.item.courseName, true)
+              }
+              setDeleteDialogOpen(false)
+            }}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            Confirmer la suppression
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
 
   if (loading) {
     return (
@@ -284,28 +430,13 @@ export default function MesCoursCollectifsPage() {
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer le cours collectif</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Êtes-vous sûr de vouloir supprimer "{groupClass.name}" ? 
-                            Cette action est irréversible et supprimera également toutes les séances associées.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteGroupClass(groupClass)}>
-                            Supprimer
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => handleDeleteGroupClass(groupClass)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -367,23 +498,36 @@ export default function MesCoursCollectifsPage() {
                       </Button>
                     </div>
                     
-                    {groupClass.sessions.length === 0 ? (
+                    {groupClass.sessions.filter(session => new Date(session.startTime) > new Date()).length === 0 ? (
                       <p className="text-xs text-gray-500 italic">Aucune séance programmée</p>
                     ) : (
                       <div className="space-y-2">
-                        {groupClass.sessions.slice(0, 2).map((session) => (
+                        {groupClass.sessions
+                          .filter(session => new Date(session.startTime) > new Date())
+                          .slice(0, 2)
+                          .map((session) => (
                           <div key={session.id} className="flex justify-between items-center text-xs bg-gray-50 rounded p-2">
                             <span>
                               {format(new Date(session.startTime), 'dd/MM à HH:mm', { locale: fr })}
                             </span>
-                            <span className="text-gray-500">
-                              {session.currentParticipants}/{groupClass.maxParticipants}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500">
+                                {session.currentParticipants}/{groupClass.maxParticipants}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                onClick={() => handleDeleteSession(session.id, groupClass.id, groupClass.name)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
-                        {groupClass.sessions.length > 2 && (
+                        {groupClass.sessions.filter(session => new Date(session.startTime) > new Date()).length > 2 && (
                           <p className="text-xs text-gray-500 text-center">
-                            +{groupClass.sessions.length - 2} autres séances
+                            +{groupClass.sessions.filter(session => new Date(session.startTime) > new Date()).length - 2} autres séances
                           </p>
                         )}
                       </div>
@@ -395,6 +539,9 @@ export default function MesCoursCollectifsPage() {
           ))}
         </div>
       )}
+
+      {/* Dialogue de confirmation de suppression */}
+      <ConfirmDeleteDialog />
 
       {/* Formulaire de création/modification de cours collectif */}
       <GroupClassForm

@@ -446,18 +446,33 @@ model InvoiceSettings {
   professional    Professional @relation("ProfessionalToInvoiceSettings", fields: [professionalId], references: [id], onDelete: Cascade)
 }
 
+// prisma/schema.prisma
+// Remplacer le modèle NotificationSettings existant par celui-ci
+
 model NotificationSettings {
-  id                    String    @id @default(cuid())
-  professionalId        String    @unique
-  emailEnabled          Boolean   @default(true)
-  smsEnabled           Boolean   @default(false)
-  bookingReminders     Boolean   @default(true)
-  bookingConfirmations Boolean   @default(true)
-  reviewReminders      Boolean   @default(true)
-  marketingEmails      Boolean   @default(false)
-  reminderHours        Int       @default(24)
+  id              String    @id @default(cuid())
+  professionalId  String    @unique
   
+  // Paramètres de base
+  emailEnabled    Boolean   @default(true)
+  smsEnabled      Boolean   @default(false)
+  reminderHours   Int       @default(24)
+  
+  // Types de notifications (nouveaux champs avec valeurs par défaut)
+  cancelationNotifications Boolean @default(true)
+  newBookingNotifications  Boolean @default(true)
+  reminderNotifications    Boolean @default(true)
+  
+  // Personnalisation des emails (nouveaux champs optionnels)
+  emailSignature           String? @db.Text
+  defaultCancelationReason String? @default("Raisons personnelles")
+  autoConfirmCancelations  Boolean @default(false)
+  
+  // Relations
   professional    Professional @relation("ProfessionalToNotifications", fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
 }
 
 model ClientPackage {

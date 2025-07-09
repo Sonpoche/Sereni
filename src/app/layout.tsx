@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Quicksand, Playfair_Display } from "next/font/google"
 import { NextAuthProvider } from "@/components/providers/next-auth-provider"
+import { Toaster } from "sonner"
 import "./globals.css"
 
 const quicksand = Quicksand({ 
@@ -29,6 +30,20 @@ export default function RootLayout({
         <NextAuthProvider>
           {children}
         </NextAuthProvider>
+        <Toaster 
+          position="top-right"
+          richColors
+          closeButton
+          duration={4000}
+          style={{
+            fontSize: '14px'
+          }}
+          toastOptions={{
+            style: {
+              fontSize: '14px'
+            }
+          }}
+        />
       </body>
     </html>
   )

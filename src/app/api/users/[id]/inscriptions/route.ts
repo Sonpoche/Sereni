@@ -82,18 +82,13 @@ export async function POST(
       return NextResponse.json({ error: "Cette séance est déjà passée" }, { status: 400 })
     }
 
-    // AJOUT : Déterminer si l'inscription doit être auto-confirmée
-    const professional = courseSession.groupClass.professional
-    const autoConfirm = professional.autoConfirmBookings ?? true // Par défaut, auto-confirmer
-    const registrationStatus = autoConfirm ? "CONFIRMED" : "REGISTERED"
-
-    // MODIFICATION : Créer l'inscription avec le bon statut
+    // Créer l'inscription
     const registration = await prisma.groupRegistration.create({
       data: {
         sessionId: data.sessionId,
         clientId: client.id,
-        status: registrationStatus, // CONFIRMED ou REGISTERED selon les préférences
-        paymentStatus: "PENDING",
+        status: "REGISTERED",
+        paymentStatus: "PENDING", // Le paiement se fera hors ligne
       }
     })
 
@@ -107,16 +102,15 @@ export async function POST(
       }
     })
 
-    // MODIFICATION : Email au praticien avec statut approprié
+    // Envoyer un email de notification au praticien
     if (courseSession.groupClass.professional.user.email) {
       try {
-        const subjectSuffix = autoConfirm ? " (confirmée automatiquement)" : " (en attente)"
-        
         await resend.emails.send({
           from: 'SereniBook <notifications@serenibook.fr>',
           to: courseSession.groupClass.professional.user.email,
-          subject: `Nouvelle inscription - ${courseSession.groupClass.name}${subjectSuffix}`,
+          subject: `Nouvelle inscription - ${courseSession.groupClass.name}`,
           html: EmailTemplates.newRegistrationNotification({
+            // CORRECTION : Fournir une valeur par défaut si name est null
             professionalName: courseSession.groupClass.professional.user.name || "Praticien",
             clientName: client.user.name || "Un client",
             courseName: courseSession.groupClass.name,
@@ -132,7 +126,6 @@ export async function POST(
             }),
             clientEmail: client.user.email || '',
             clientPhone: client.phone || 'Non renseigné'
-            // SUPPRIMÉ temporairement : autoConfirmed: autoConfirm
           })
         })
       } catch (emailError) {
@@ -140,20 +133,17 @@ export async function POST(
       }
     }
 
-    // MODIFICATION : Email au client avec message approprié
+    // Envoyer un email de confirmation au client
     if (client.user.email) {
       try {
-        const clientSubject = autoConfirm 
-          ? `Inscription confirmée - ${courseSession.groupClass.name}`
-          : `Demande d'inscription envoyée - ${courseSession.groupClass.name}`
-
         await resend.emails.send({
           from: 'SereniBook <notifications@serenibook.fr>',
           to: client.user.email,
-          subject: clientSubject,
+          subject: `Demande d'inscription envoyée - ${courseSession.groupClass.name}`,
           html: EmailTemplates.registrationConfirmationClient({
             clientName: client.user.name || "Client",
             courseName: courseSession.groupClass.name,
+            // CORRECTION : Fournir une valeur par défaut si name est null
             professionalName: courseSession.groupClass.professional.user.name || "Praticien",
             sessionDate: courseSession.startTime.toLocaleDateString('fr-FR', {
               weekday: 'long',
@@ -166,7 +156,6 @@ export async function POST(
               minute: '2-digit'
             }),
             price: Number(courseSession.groupClass.price)
-            // SUPPRIMÉ temporairement : isConfirmed: autoConfirm
           })
         })
       } catch (emailError) {
@@ -174,14 +163,9 @@ export async function POST(
       }
     }
 
-    // MODIFICATION : Retourner l'information sur l'auto-confirmation
     return NextResponse.json({
       success: true,
-      registration,
-      autoConfirmed: autoConfirm,
-      message: autoConfirm 
-        ? "Inscription confirmée automatiquement !" 
-        : "Inscription enregistrée, en attente de validation"
+      registration
     })
 
   } catch (error) {
@@ -201,7 +185,7 @@ export async function POST(
   }
 }
 
-// GET pour récupérer les inscriptions de l'utilisateur (inchangé)
+// GET pour récupérer les inscriptions de l'utilisateur
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
