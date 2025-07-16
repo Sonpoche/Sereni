@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ConseilBox } from "@/components/ui/conseil-box"
+import { Badge } from "@/components/ui/badge"
 import { 
   Form, 
   FormControl, 
@@ -23,12 +23,12 @@ import {
   Loader2, 
   Plus, 
   Trash2,
-  Settings,
   Clock,
   Euro,
-  Palette,
+  MapPin,
   Lightbulb,
-  CheckCircle
+  Sparkles,
+  Copy
 } from "lucide-react"
 
 // Schéma pour un service individuel
@@ -41,7 +41,6 @@ const serviceSchema = z.object({
   location: z.string().optional(),
 })
 
-// Schéma pour le formulaire complet
 const servicesFormSchema = z.object({
   services: z.array(serviceSchema).min(1, "Vous devez créer au moins un service"),
 })
@@ -55,23 +54,39 @@ const PRESET_COLORS = [
   "#f97316", "#ec4899", "#6b7280", "#dc2626"
 ]
 
-// Services exemples selon le type de professionnel
+// Services suggérés selon le type de professionnel
 const SERVICE_TEMPLATES = {
-  "coach": [
-    { name: "Coaching individuel", description: "Séance de coaching personnalisée pour atteindre vos objectifs", duration: 60, price: 80, color: "#6746c3" },
-    { name: "Consultation découverte", description: "Premier entretien pour faire connaissance et définir vos besoins", duration: 30, price: 40, color: "#3b82f6" },
+  "LIFE_COACH": [
+    { name: "Séance de coaching individuel", description: "Accompagnement personnalisé pour atteindre vos objectifs de vie", duration: 60, price: 80, color: "#6746c3" },
+    { name: "Consultation découverte", description: "Premier entretien pour faire connaissance et définir vos besoins", duration: 45, price: 50, color: "#3b82f6" },
+    { name: "Coaching de couple", description: "Séance d'accompagnement pour couples", duration: 90, price: 120, color: "#ec4899" },
   ],
-  "therapeute": [
-    { name: "Séance de thérapie", description: "Accompagnement thérapeutique individuel", duration: 50, price: 70, color: "#10b981" },
-    { name: "Première consultation", description: "Entretien initial pour établir le diagnostic et le plan de traitement", duration: 60, price: 80, color: "#f59e0b" },
+  "PERSONAL_COACH": [
+    { name: "Entraînement personnel", description: "Séance de sport individuelle adaptée à vos objectifs", duration: 60, price: 60, color: "#ef4444" },
+    { name: "Bilan forme et nutrition", description: "Évaluation complète de votre condition physique", duration: 90, price: 80, color: "#f59e0b" },
+    { name: "Coaching en petit groupe", description: "Entraînement en groupe de 2-4 personnes", duration: 60, price: 40, color: "#84cc16" },
   ],
-  "masseur": [
-    { name: "Massage relaxant", description: "Massage de détente pour éliminer le stress et les tensions", duration: 60, price: 60, color: "#8b5cf6" },
-    { name: "Massage thérapeutique", description: "Massage ciblé pour soulager les douleurs musculaires", duration: 45, price: 70, color: "#ef4444" },
+  "YOGA_TEACHER": [
+    { name: "Cours de yoga individuel", description: "Séance de yoga personnalisée selon votre niveau", duration: 60, price: 70, color: "#10b981" },
+    { name: "Cours de yoga en duo", description: "Séance de yoga pour deux personnes", duration: 75, price: 90, color: "#06b6d4" },
+    { name: "Initiation au yoga", description: "Première séance pour découvrir le yoga", duration: 45, price: 50, color: "#8b5cf6" },
+  ],
+  "THERAPIST": [
+    { name: "Séance de thérapie individuelle", description: "Accompagnement thérapeutique personnalisé", duration: 50, price: 70, color: "#6746c3" },
+    { name: "Première consultation", description: "Entretien initial pour établir le diagnostic", duration: 60, price: 80, color: "#3b82f6" },
+    { name: "Thérapie de couple", description: "Accompagnement thérapeutique pour couples", duration: 90, price: 110, color: "#ec4899" },
+  ],
+  "MASSAGE_THERAPIST": [
+    { name: "Massage relaxant", description: "Massage de détente pour éliminer le stress", duration: 60, price: 60, color: "#06b6d4" },
+    { name: "Massage thérapeutique", description: "Massage ciblé pour soulager les douleurs", duration: 45, price: 70, color: "#ef4444" },
+    { name: "Massage complet du corps", description: "Massage relaxant de tout le corps", duration: 90, price: 90, color: "#8b5cf6" },
+  ],
+  "OTHER": [
+    { name: "Consultation personnalisée", description: "Séance individuelle adaptée à vos besoins", duration: 60, price: 60, color: "#6746c3" },
+    { name: "Première rencontre", description: "Entretien découverte pour définir vos objectifs", duration: 45, price: 40, color: "#3b82f6" },
   ],
   "default": [
     { name: "Consultation", description: "Séance individuelle personnalisée", duration: 60, price: 60, color: "#6746c3" },
-    { name: "Première rencontre", description: "Entretien découverte pour définir vos besoins", duration: 30, price: 30, color: "#3b82f6" },
   ]
 }
 
@@ -88,9 +103,8 @@ export default function ServicesSetup({
   professionalType = "default",
   isLoading = false 
 }: ServicesSetupProps) {
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
-
-  // Obtenir les templates selon le type de professionnel
+  const [showTemplates, setShowTemplates] = useState(true)
+  
   const templates = SERVICE_TEMPLATES[professionalType as keyof typeof SERVICE_TEMPLATES] || SERVICE_TEMPLATES.default
 
   const form = useForm<ServicesFormData>({
@@ -105,8 +119,7 @@ export default function ServicesSetup({
     name: "services"
   })
 
-  // Ajouter un service vide
-  const addService = () => {
+  const addEmptyService = () => {
     append({
       name: "",
       description: "",
@@ -117,14 +130,10 @@ export default function ServicesSetup({
     })
   }
 
-  // Utiliser un template
   const useTemplate = (template: typeof templates[0]) => {
-    const currentServices = form.getValues("services")
-    const updatedServices = [...currentServices, template]
-    form.setValue("services", updatedServices)
+    append(template)
   }
 
-  // Supprimer un service
   const removeService = (index: number) => {
     if (fields.length > 1) {
       remove(index)
@@ -132,77 +141,103 @@ export default function ServicesSetup({
   }
 
   const handleSubmit = (data: ServicesFormData) => {
-    console.log("Services à créer:", data)
     onSubmit(data)
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-2xl font-title font-medium">Configurez vos services</h2>
-        <p className="text-gray-600">
-          Définissez les services que vous proposez à vos clients
+    <div className="max-w-5xl mx-auto space-y-8">
+      {/* Header */}
+      <div className="text-center space-y-3">
+        <h2 className="text-3xl font-bold text-gray-900">Configurez vos services</h2>
+        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          Définissez les prestations que vous proposez à vos clients. Vous pourrez en ajouter d'autres plus tard.
         </p>
       </div>
 
-      <ConseilBox>
-        <div className="flex items-start gap-3">
-          <Lightbulb className="h-5 w-5 text-amber-500 mt-0.5" />
-          <div>
-            <h4 className="font-medium mb-1">Conseils pour vos services</h4>
-            <ul className="text-sm space-y-1">
-              <li>• Créez au moins un service pour commencer</li>
-              <li>• Vous pourrez ajouter d'autres services plus tard</li>
-              <li>• Soyez descriptif pour attirer vos clients</li>
-              <li>• Utilisez des couleurs différentes pour bien les distinguer</li>
-            </ul>
+      {/* Information complémentaire */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <div className="flex items-start gap-4">
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <Lightbulb className="h-5 w-5 text-blue-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-blue-900 mb-2">Services individuels vs cours collectifs</h3>
+            <p className="text-blue-800 mb-3">
+              Les services que vous créez ici sont pour des <strong>rendez-vous individuels</strong> avec vos clients.
+            </p>
+            <div className="bg-blue-100 rounded-lg p-3">
+              <p className="text-sm text-blue-700">
+                <strong>Cours collectifs :</strong> Après votre inscription, vous pourrez créer des cours collectifs 
+                depuis votre tableau de bord pour proposer des séances en groupe.
+              </p>
+            </div>
           </div>
         </div>
-      </ConseilBox>
+      </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-          {/* Templates suggérés */}
-          {templates.length > 1 && (
+        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
+          
+          {/* Services suggérés */}
+          {showTemplates && templates.length > 1 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  Services suggérés
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-amber-500" />
+                    Services suggérés pour votre activité
+                  </CardTitle>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowTemplates(false)}
+                  >
+                    Masquer
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {templates.slice(1).map((template, index) => (
-                    <div key={index} className="border rounded-lg p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-medium">{template.name}</h4>
+                    <div 
+                      key={index} 
+                      className="group border rounded-xl p-4 hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer"
+                      onClick={() => useTemplate(template)}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900 group-hover:text-primary transition-colors">
+                          {template.name}
+                        </h4>
                         <div 
-                          className="w-4 h-4 rounded-full border"
+                          className="w-4 h-4 rounded-full border-2 border-gray-300"
                           style={{ backgroundColor: template.color }}
                         />
                       </div>
-                      <p className="text-sm text-gray-600">{template.description}</p>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {template.duration}min
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Euro className="h-3 w-3" />
-                          {template.price}€
-                        </span>
+                      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                        {template.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {template.duration}min
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Euro className="h-3 w-3" />
+                            {template.price}€
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Copy className="h-3 w-3 mr-1" />
+                          Utiliser
+                        </Button>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => useTemplate(template)}
-                        className="w-full"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Ajouter ce service
-                      </Button>
                     </div>
                   ))}
                 </div>
@@ -210,127 +245,124 @@ export default function ServicesSetup({
             </Card>
           )}
 
-          {/* Liste des services */}
-          <div className="space-y-4">
+          {/* Mes services */}
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium">Vos services</h3>
+              <h3 className="text-xl font-semibold text-gray-900">
+                Mes services ({fields.length})
+              </h3>
               <Button
                 type="button"
                 variant="outline"
-                onClick={addService}
+                onClick={addEmptyService}
                 className="flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
-                Ajouter un service
+                Créer un service
               </Button>
             </div>
 
-            {fields.map((field, index) => (
-              <Card key={field.id} className="relative">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">
-                      Service {index + 1}
-                    </CardTitle>
-                    {fields.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeService(index)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name={`services.${index}.name`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nom du service</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="Ex: Coaching individuel" 
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name={`services.${index}.color`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Couleur</FormLabel>
-                          <div className="flex items-center gap-2">
-                            <FormControl>
-                              <Input 
-                                type="color" 
-                                {...field} 
-                                className="w-16 h-10 p-1" 
-                              />
-                            </FormControl>
-                            <div className="flex gap-1">
-                              {PRESET_COLORS.slice(0, 6).map((color) => (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  className={`w-6 h-6 rounded-full border-2 ${
-                                    field.value === color 
-                                      ? 'border-gray-900' 
-                                      : 'border-gray-200'
-                                  }`}
-                                  style={{ backgroundColor: color }}
-                                  onClick={() => field.onChange(color)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name={`services.${index}.description`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            placeholder="Décrivez votre service..." 
-                            rows={3}
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+            <div className="space-y-6">
+              {fields.map((field, index) => (
+                <Card key={field.id} className="relative overflow-hidden">
+                  {/* Barre colorée */}
+                  <div 
+                    className="absolute top-0 left-0 w-full h-1"
+                    style={{ backgroundColor: form.watch(`services.${index}.color`) }}
                   />
+                  
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">
+                        Service {index + 1}
+                      </CardTitle>
+                      {fields.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeService(index)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="space-y-6">
+                    {/* Ligne 1: Nom + Couleur */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      <div className="lg:col-span-2">
+                        <FormField
+                          control={form.control}
+                          name={`services.${index}.name`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-base font-medium">Nom du service</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  placeholder="Ex: Séance de coaching"
+                                  className="h-11"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      <FormField
+                        control={form.control}
+                        name={`services.${index}.color`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-base font-medium">Couleur</FormLabel>
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  className="w-11 h-11 rounded-lg border border-gray-300"
+                                />
+                                <Input 
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  placeholder="#6746c3"
+                                  className="h-11"
+                                />
+                              </div>
+                              <div className="flex gap-1 flex-wrap">
+                                {PRESET_COLORS.map((color) => (
+                                  <button
+                                    key={color}
+                                    type="button"
+                                    onClick={() => field.onChange(color)}
+                                    className="w-6 h-6 rounded border-2 border-gray-200 hover:border-gray-400 transition-colors"
+                                    style={{ backgroundColor: color }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Ligne 2: Description */}
                     <FormField
                       control={form.control}
-                      name={`services.${index}.duration`}
+                      name={`services.${index}.description`}
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Durée (minutes)</FormLabel>
+                          <FormLabel className="text-base font-medium">Description</FormLabel>
                           <FormControl>
-                            <Input 
-                              type="number"
-                              min="15"
-                              max="480"
-                              step="15"
+                            <Textarea 
+                              placeholder="Décrivez ce service en détail pour attirer vos clients..."
+                              className="min-h-[100px] resize-none"
                               {...field}
                             />
                           </FormControl>
@@ -339,73 +371,102 @@ export default function ServicesSetup({
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name={`services.${index}.price`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Prix (€)</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {/* Ligne 3: Durée + Prix + Lieu */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <FormField
+                        control={form.control}
+                        name={`services.${index}.duration`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-base font-medium">Durée (min)</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                <Input 
+                                  type="number"
+                                  min="15"
+                                  max="480"
+                                  placeholder="60"
+                                  className="pl-10 h-11"
+                                  {...field}
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name={`services.${index}.location`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Lieu (optionnel)</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="Ex: Cabinet, domicile..."
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                      <FormField
+                        control={form.control}
+                        name={`services.${index}.price`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-base font-medium">Prix (€)</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Euro className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                <Input 
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="60.00"
+                                  className="pl-10 h-11"
+                                  {...field}
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`services.${index}.location`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-base font-medium">Lieu (optionnel)</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                <Input 
+                                  placeholder="Cabinet, domicile..."
+                                  className="pl-10 h-11"
+                                  {...field}
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
 
           {/* Boutons de navigation */}
-          <div className="flex justify-between pt-6">
+          <div className="flex items-center justify-between pt-8">
             <Button
               type="button"
               variant="outline"
               onClick={onBack}
               disabled={isLoading}
+              size="lg"
             >
               Précédent
             </Button>
-            <Button
+            <Button 
               type="submit"
               disabled={isLoading}
+              size="lg"
               className="px-8"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Création...
-                </>
-              ) : (
-                <>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Créer mes services
-                </>
-              )}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Continuer
             </Button>
           </div>
         </form>

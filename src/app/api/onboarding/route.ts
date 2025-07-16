@@ -60,12 +60,20 @@ const onboardingSchema = z.object({
   }),
 })
 
-// Fonction de mappage des types professionnels
+// Fonction de mappage des types professionnels - Frontend vers Prisma
 const mapToProfessionalType = (type: string): ProfessionalType => {
   const mapping: Record<string, ProfessionalType> = {
-    "coach": "LIFE_COACH",
-    "therapeute": "THERAPIST", 
-    "masseur": "MASSAGE_THERAPIST",
+    // Types exacts de Prisma
+    "LIFE_COACH": "LIFE_COACH",
+    "PERSONAL_COACH": "PERSONAL_COACH", 
+    "YOGA_TEACHER": "YOGA_TEACHER",
+    "PILATES_INSTRUCTOR": "PILATES_INSTRUCTOR",
+    "THERAPIST": "THERAPIST",
+    "MASSAGE_THERAPIST": "MASSAGE_THERAPIST",
+    "MEDITATION_TEACHER": "MEDITATION_TEACHER",
+    "OTHER": "OTHER",
+    
+    // Mappings depuis les valeurs Frontend
     "COACH_VIE": "LIFE_COACH",
     "COACH_SPORTIF": "PERSONAL_COACH",
     "PROF_YOGA": "YOGA_TEACHER",
@@ -73,16 +81,21 @@ const mapToProfessionalType = (type: string): ProfessionalType => {
     "THERAPEUTE": "THERAPIST",
     "PRATICIEN_MASSAGE": "MASSAGE_THERAPIST",
     "PROF_MEDITATION": "MEDITATION_TEACHER",
+    "NATUROPATHE": "OTHER",
+    "NUTRITIONNISTE": "OTHER",
+    "OSTEOPATHE": "OTHER",
+    "REFLEXOLOGUE": "OTHER",
+    "SOPHROLOGUE": "OTHER",
+    "AUTRE": "OTHER"
   }
-  
+
+  console.log('🔄 [API] Mappage du type:', type, '->', mapping[type] || "OTHER")
   return mapping[type] || "OTHER"
 }
 
 export async function POST(request: Request) {
   try {
-    console.log('🟦 [API] Début de l\'onboarding')
-    
-    // Vérifier l'authentification
+    // Vérification de l'authentification
     const session = await auth()
     if (!session?.user?.id) {
       console.log('🔴 [API] Utilisateur non authentifié')
@@ -92,14 +105,13 @@ export async function POST(request: Request) {
       }, { status: 401 })
     }
 
-    // Récupérer et valider les données
+    // Récupération et validation des données
     const body = await request.json()
     console.log('🟦 [API] Données reçues:', JSON.stringify(body, null, 2))
-    
-    const data = onboardingSchema.parse(body)
-    console.log('🟦 [API] Données validées pour l\'utilisateur:', data.userId)
 
-    // Vérifier que l'utilisateur existe
+    const data = onboardingSchema.parse(body)
+
+    // Vérification que l'utilisateur existe
     const userBefore = await prisma.user.findUnique({
       where: { id: data.userId },
       include: {
@@ -121,6 +133,7 @@ export async function POST(request: Request) {
     // Traitement pour les professionnels
     if (data.role === UserRole.PROFESSIONAL) {
       try {
+        // Vérifier si le profil professionnel existe déjà
         if (userBefore.professionalProfile) {
           console.log('🟨 [API] Profil professionnel déjà existant')
           return NextResponse.json({ 
@@ -227,7 +240,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Traitement pour les clients (inchangé)
+    // Traitement pour les clients
     if (data.role === UserRole.CLIENT) {
       try {
         if (userBefore.clientProfile) {
@@ -241,41 +254,33 @@ export async function POST(request: Request) {
 
         console.log('🟦 [API] Création du profil client...')
 
-        // Création du profil dans une transaction
-        const result = await prisma.$transaction(async (tx) => {
-          // Créer d'abord le profil client
-          const client = await tx.client.create({
-            data: {
-              userId: userBefore.id,
-              phone: data.personalInfo.phone,
-              address: data.personalInfo.address,
-              city: data.personalInfo.city,
-              postalCode: data.personalInfo.postalCode,
-              notes: "",
-              preferredLanguage: "fr"
-            },
-          })
-
-          console.log('🟦 [API] Profil client créé, ID:', client.id)
-
-          // Mise à jour directe avec Prisma.sql
-          await tx.$executeRaw`UPDATE "User" SET "hasProfile" = true WHERE id = ${userBefore.id}`
-
-          // Mettre à jour le nom si fourni
-          if (data.personalInfo.name) {
-            await tx.user.update({
-              where: { id: userBefore.id },
-              data: { name: data.personalInfo.name }
-            })
-          }
-
-          return client
+        const clientProfile = await prisma.client.create({
+          data: {
+            userId: userBefore.id,
+            phone: data.personalInfo.phone,
+            address: data.personalInfo.address,
+            city: data.personalInfo.city,
+            postalCode: data.personalInfo.postalCode,
+          },
         })
+
+        // Mise à jour du statut hasProfile
+        await prisma.$executeRaw`UPDATE "User" SET "hasProfile" = true WHERE id = ${userBefore.id}`
+
+        // Mettre à jour le nom si fourni
+        if (data.personalInfo.name) {
+          await prisma.user.update({
+            where: { id: userBefore.id },
+            data: { name: data.personalInfo.name }
+          })
+        }
+
+        console.log('🟦 [API] Profil client créé:', clientProfile.id)
 
         return NextResponse.json({ 
           success: true,
-          data: result,
-          redirect: "/tableau-de-bord?fromOnboarding=true"
+          data: { clientProfile },
+          redirect: "/tableau-de-bord"
         })
 
       } catch (error) {
@@ -289,24 +294,24 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ 
       success: false,
-      error: "Type de profil non supporté" 
+      error: "Type de rôle non supporté" 
     }, { status: 400 })
 
   } catch (error) {
-    console.error('🔴 [API] Erreur détaillée:', error)
+    console.error('🔴 [API] Erreur générale:', error)
     
     if (error instanceof z.ZodError) {
-      console.error('🔴 [API] Erreurs de validation:', error.errors)
-      return NextResponse.json({
+      console.log('🔴 [API] Erreur de validation:', error.errors)
+      return NextResponse.json({ 
         success: false,
         error: "Données invalides",
         details: error.errors
       }, { status: 400 })
     }
-    
-    return NextResponse.json({
+
+    return NextResponse.json({ 
       success: false,
-      error: "Erreur interne du serveur"
+      error: "Erreur interne du serveur" 
     }, { status: 500 })
   }
 }

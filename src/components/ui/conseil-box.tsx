@@ -17,7 +17,7 @@ export function ConseilBox({
 }: ConseilBoxProps) {
   return (
     <div className={cn(
-      "bg-lavender-light/30 rounded-lg p-4 mb-8", // Réduit le padding et ajout d'une marge en bas par défaut
+      "bg-lavender-light/30 rounded-lg p-4 mb-8",
       className
     )}>
       <div className="flex items-start gap-3">
@@ -28,9 +28,9 @@ export function ConseilBox({
           {title && title !== "Conseil" && (
             <h3 className="text-sm font-medium text-lavender-dark mb-1">{title}</h3>
           )}
-          <p className="text-sm text-lavender-dark/90">
+          <div className="text-sm text-lavender-dark/90">
             {children}
-          </p>
+          </div>
         </div>
       </div>
     </div>
