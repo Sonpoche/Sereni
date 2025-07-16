@@ -32,7 +32,7 @@ export default function RendezVousPage() {
   const calendarRef = useRef<any>(null)
   const [isUpdatingDate, setIsUpdatingDate] = useState(false)
   
-  // Nouveaux états pour les cours collectifs
+  // États pour les cours collectifs (affichage uniquement)
   const [showGroupClasses, setShowGroupClasses] = useState(true)
 
   // Charger les données initiales
@@ -58,7 +58,7 @@ export default function RendezVousPage() {
         
         const appointmentsData = await appointmentsRes.json()
         
-        // Traitement des cours collectifs
+        // Traitement des cours collectifs (affichage uniquement)
         let groupSessionsAsAppointments = []
         if (groupClassesRes.ok) {
           const groupClassesData = await groupClassesRes.json()
@@ -115,9 +115,11 @@ export default function RendezVousPage() {
         // Charger les services
         if (servicesRes.ok) {
           const servicesData = await servicesRes.json()
-          // Filtrer le service de blocage des plages
+          // Filtrer le service de blocage des plages ET les services de groupe
           const filteredServices = servicesData.filter((service: any) => 
-            service.name !== "Blocage de plage" && service.active !== false
+            service.name !== "Blocage de plage" && 
+            service.active !== false &&
+            !service.isGroupService // Exclure les services de groupe
           )
           setServices(filteredServices)
         }
@@ -206,21 +208,34 @@ export default function RendezVousPage() {
     }
   }, [session, showGroupClasses])
 
-  // Fonction pour vérifier les conflits d'horaires
-  const checkTimeConflict = (newStart: Date, newEnd: Date, excludeId?: string) => {
-    return appointments.some((apt: any) => {
-      if (excludeId && apt.id === excludeId) return false
+  // Fonction pour vérifier les conflits d'horaires avec l'API
+  const checkTimeConflict = async (newStart: Date, newEnd: Date, excludeId?: string) => {
+    if (!session?.user?.id) return false
+    
+    try {
+      const response = await fetch(`/api/users/${session.user.id}/check-conflicts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
+          excludeId: excludeId
+        }),
+      })
       
-      const aptStart = new Date(apt.startTime)
-      const aptEnd = new Date(apt.endTime)
+      if (!response.ok) {
+        console.error("Erreur lors de la vérification des conflits")
+        return false
+      }
       
-      // Vérifier le chevauchement
-      return (
-        (newStart >= aptStart && newStart < aptEnd) ||
-        (newEnd > aptStart && newEnd <= aptEnd) ||
-        (newStart <= aptStart && newEnd >= aptEnd)
-      )
-    })
+      const result = await response.json()
+      return result.hasConflicts
+    } catch (error) {
+      console.error("Erreur lors de la vérification des conflits:", error)
+      return false
+    }
   }
 
   // Fonction pour supprimer une séance de cours collectif
@@ -308,89 +323,50 @@ export default function RendezVousPage() {
     }
   }, [appointments])
 
-  // Gestion des formulaires - code existant inchangé
+  // Gestion du formulaire de rendez-vous (individuel uniquement)
   const handleAppointmentSubmit = async (data: any) => {
     try {
-      const formData = { ...data };
+      console.log("Création d'un rendez-vous individuel:", data);
       
-      if (formData.isGroupClass) {
-        console.log("Création d'un cours collectif avec les données:", formData);
+      // Vérifier les conflits avant de créer
+      const serviceSelected = services.find(s => s.id === data.serviceId)
+      if (serviceSelected) {
+        const startTime = new Date(`${data.date}T${data.startTime}`)
+        const endTime = new Date(startTime.getTime() + serviceSelected.duration * 60000)
         
-        const groupClassData = {
-          serviceId: formData.serviceId,
-          date: formData.date,
-          startTime: formData.startTime,
-          maxParticipants: Number(formData.maxParticipants) || 10,
-          notes: formData.notes || "",
-          isGroupClass: true
-        };
+        const hasConflict = await checkTimeConflict(startTime, endTime, data.excludeId)
         
-        console.log("Données formatées pour l'API des cours collectifs:", groupClassData);
-        
-        const response = await fetch(`/api/users/${session?.user?.id}/group-classes`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(groupClassData),
-        });
-        
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          console.error("Erreur cours collectif:", responseData);
-          
-          if (response.status === 409) {
-            const error = new Error(responseData.message || "Conflit d'horaire");
-            // @ts-ignore
-            error.status = 409;
-            throw error;
-          }
-          
-          if (responseData.details && Array.isArray(responseData.details)) {
-            console.error("Détails de validation:", responseData.details);
-            const errorMessages = responseData.details.map((err: any) => 
-              `${err.path.join('.')}: ${err.message}`
-            ).join(', ');
-            throw new Error(`Erreur de validation: ${errorMessages}`);
-          }
-          
-          throw new Error(responseData.error || "Erreur lors de la création du cours collectif");
+        if (hasConflict) {
+          toast.error("Ce créneau entre en conflit avec un rendez-vous ou cours collectif existant")
+          return Promise.reject(new Error("Conflit d'horaire"))
         }
-        
-        console.log("Cours collectif créé:", responseData);
-        
-        await refreshAppointments();
-        setIsFormOpen(false);
-        toast.success("Cours collectif créé avec succès");
-        return Promise.resolve();
-      } else {
-        const response = await fetch(`/api/users/${session?.user?.id}/appointments`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(formData),
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          
-          if (response.status === 409) {
-            const error = new Error(errorData.message || "Ce créneau chevauche un rendez-vous existant");
-            // @ts-ignore
-            error.status = 409;
-            throw error;
-          }
-          
-          throw new Error(errorData.error || "Erreur lors de la création du rendez-vous");
-        }
-        
-        await refreshAppointments();
-        setIsFormOpen(false);
-        toast.success("Rendez-vous créé avec succès");
-        return Promise.resolve();
       }
+      
+      const response = await fetch(`/api/users/${session?.user?.id}/appointments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        
+        if (response.status === 409) {
+          const error = new Error(errorData.message || "Ce créneau chevauche un rendez-vous existant");
+          // @ts-ignore
+          error.status = 409;
+          throw error;
+        }
+        
+        throw new Error(errorData.error || "Erreur lors de la création du rendez-vous");
+      }
+      
+      await refreshAppointments();
+      setIsFormOpen(false);
+      toast.success("Rendez-vous créé avec succès");
+      return Promise.resolve();
     } catch (error) {
       console.error("Erreur lors de l'enregistrement du rendez-vous:", error);
       toast.error(error instanceof Error ? error.message : "Erreur lors de la création du rendez-vous");
@@ -398,9 +374,20 @@ export default function RendezVousPage() {
     }
   };
 
-  // Gestion du blocage de plage horaire - code existant inchangé
+  // Gestion du blocage de plage horaire
   const handleBlockTimeSubmit = async (data: any) => {
     try {
+      // Vérifier les conflits avant de bloquer
+      const hasConflict = await checkTimeConflict(
+        new Date(`${data.date}T${data.startTime}`),
+        new Date(`${data.date}T${data.endTime}`)
+      )
+      
+      if (hasConflict) {
+        toast.error("Ce créneau entre en conflit avec un rendez-vous ou cours collectif existant")
+        return Promise.reject(new Error("Conflit d'horaire"))
+      }
+      
       const response = await fetch(`/api/users/${session?.user?.id}/blocked-times`, {
         method: "POST",
         headers: {
@@ -433,7 +420,7 @@ export default function RendezVousPage() {
     }
   }
 
-  // Actions sur les rendez-vous - code existant inchangé mais avec gestion des cours collectifs
+  // Actions sur les rendez-vous
   const handleCancelAppointment = async () => {
     if (!selectedAppointment) return
     
@@ -512,6 +499,12 @@ export default function RendezVousPage() {
   const handleEditAppointment = () => {
     if (!selectedAppointment) return
     
+    // Ne pas permettre l'édition des cours collectifs depuis cette page
+    if (selectedAppointment.isGroupClass) {
+      toast.info("Pour modifier un cours collectif, rendez-vous dans la section 'Mes cours collectifs'")
+      return
+    }
+    
     const startDate = new Date(selectedAppointment.startTime)
     
     setFormDefaultValues({
@@ -538,7 +531,7 @@ export default function RendezVousPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-title font-medium">Gestion des rendez-vous</h1>
         <div className="flex items-center space-x-4">
-          {/* Toggle pour les cours collectifs */}
+          {/* Toggle pour les cours collectifs (affichage uniquement) */}
           <div className="flex items-center space-x-2">
             <Button
               variant={showGroupClasses ? "default" : "outline"}
@@ -592,7 +585,7 @@ export default function RendezVousPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Calendrier amélioré */}
+        {/* Calendrier */}
         <div className="lg:w-3/4">
           <Card>
             <CardHeader className="pb-0">
@@ -632,7 +625,7 @@ export default function RendezVousPage() {
               {selectedAppointment ? (
                 <AppointmentDetails 
                   appointment={selectedAppointment}
-                  onEdit={selectedAppointment.isGroupClass ? () => {} : handleEditAppointment}
+                  onEdit={handleEditAppointment}
                   onCancel={selectedAppointment.isGroupClass ? async () => {} : handleCancelAppointment}
                   onComplete={selectedAppointment.isGroupClass ? async () => {} : handleCompleteAppointment}
                   onDelete={handleDeleteAppointment}
@@ -653,7 +646,7 @@ export default function RendezVousPage() {
         </div>
       </div>
       
-      {/* Formulaire de rendez-vous */}
+      {/* Formulaire de rendez-vous (individuel uniquement) */}
       <AppointmentForm
         open={isFormOpen}
         onOpenChange={setIsFormOpen}

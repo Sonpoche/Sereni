@@ -8,7 +8,7 @@ const conflictCheckSchema = z.object({
   startTime: z.string(), // Format ISO string
   endTime: z.string(),   // Format ISO string
   excludeId: z.string().optional(), // ID à exclure de la vérification (pour modification)
-  type: z.enum(['appointment', 'group-session']).optional() // Type de vérification
+  type: z.enum(['appointment', 'group-session', 'blocked-time']).optional() // Type de vérification
 })
 
 export async function POST(
@@ -29,6 +29,7 @@ export async function POST(
     console.log(`🔍 Vérification des conflits pour l'utilisateur ${id}`)
     console.log(`   Période: ${data.startTime} → ${data.endTime}`)
     console.log(`   Exclude ID: ${data.excludeId || 'Aucun'}`)
+    console.log(`   Type: ${data.type || 'Toutes'}`)
 
     // Récupérer le profil professionnel
     const professional = await prisma.professional.findUnique({
@@ -46,7 +47,7 @@ export async function POST(
     const conflictingAppointments = await prisma.booking.findMany({
       where: {
         professionalId: professional.id,
-        NOT: data.excludeId ? { id: data.excludeId } : undefined,
+        NOT: data.excludeId && !data.excludeId.startsWith('group-') ? { id: data.excludeId } : undefined,
         status: { not: "CANCELLED" },
         OR: [
           // Nouveau RDV commence pendant un RDV existant
@@ -69,7 +70,7 @@ export async function POST(
       include: {
         client: {
           include: {
-            user: { select: { name: true } }
+            user: { select: { name: true, email: true } }
           }
         },
         service: { select: { name: true } }
@@ -106,18 +107,35 @@ export async function POST(
       }
     })
 
-    const conflicts = []
+    // Définir le type des conflits
+    type ConflictType = {
+      id: string
+      type: 'appointment' | 'group-session' | 'blocked-time'
+      title: string
+      clientName: string
+      startTime: Date
+      endTime: Date
+      description: string
+    }
+
+    const conflicts: ConflictType[] = []
 
     // Formater les conflits de rendez-vous
     conflictingAppointments.forEach(apt => {
+      // Vérifier si c'est une plage bloquée
+      const isBlockedTime = apt.status === "CANCELLED" && 
+        apt.client?.user?.email === "system@serenibook.app"
+      
       conflicts.push({
         id: apt.id,
-        type: 'appointment',
-        title: apt.service.name,
-        clientName: apt.client.user.name,
+        type: isBlockedTime ? 'blocked-time' : 'appointment',
+        title: isBlockedTime ? 'Plage bloquée' : apt.service.name,
+        clientName: isBlockedTime ? 'Indisponible' : (apt.client.user.name || 'Client inconnu'),
         startTime: apt.startTime,
         endTime: apt.endTime,
-        description: `Rendez-vous ${apt.service.name} avec ${apt.client.user.name}`
+        description: isBlockedTime 
+          ? `Plage horaire bloquée` 
+          : `Rendez-vous ${apt.service.name} avec ${apt.client.user.name || 'Client inconnu'}`
       })
     })
 
@@ -135,6 +153,14 @@ export async function POST(
     })
 
     console.log(`📊 ${conflicts.length} conflit(s) détecté(s)`)
+    
+    // Détailler les conflits trouvés
+    if (conflicts.length > 0) {
+      console.log(`   Conflits détectés:`)
+      conflicts.forEach(conflict => {
+        console.log(`   - ${conflict.type}: ${conflict.title} (${conflict.startTime} → ${conflict.endTime})`)
+      })
+    }
 
     return NextResponse.json({
       hasConflicts: conflicts.length > 0,

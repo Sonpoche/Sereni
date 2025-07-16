@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2, Users } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -21,29 +20,15 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
+// Schéma simplifié sans cours collectifs
 const serviceSchema = z.object({
   name: z.string().min(3, "Le nom du service doit contenir au moins 3 caractères"),
   description: z.string().min(10, "La description doit contenir au moins 10 caractères"),
   duration: z.coerce.number().min(5, "La durée minimum est de 5 minutes").max(480, "La durée maximum est de 8 heures"),
   price: z.coerce.number().min(0, "Le prix ne peut pas être négatif"),
   color: z.string().default("#6746c3"),
-  isGroupService: z.boolean().default(false),
-  maxParticipants: z.coerce.number().min(2, "Au moins 2 participants sont requis").max(50, "Maximum 50 participants").optional(),
   location: z.string().optional(),
-})
-.refine(
-  (data) => {
-    // Si c'est un service de groupe, maxParticipants est obligatoire
-    if (data.isGroupService) {
-      return !!data.maxParticipants && data.maxParticipants >= 2;
-    }
-    return true;
-  },
-  {
-    message: "Le nombre maximum de participants est requis pour un cours collectif",
-    path: ["maxParticipants"],
-  }
-);
+});
 
 type ServiceFormValues = z.infer<typeof serviceSchema>
 
@@ -69,22 +54,18 @@ export function ServiceForm({
       description: "",
       duration: 60,
       price: 0,
-      color: "#6746c3", // Couleur lavande par défaut
-      isGroupService: false,
+      color: "#6746c3",
       location: "",
     }
   });
   
-  // Ajoutons cet effet pour réinitialiser le formulaire quand open ou defaultValues changent
+  // Réinitialiser le formulaire quand open ou defaultValues changent
   useEffect(() => {
     if (open && defaultValues) {
       console.log("Réinitialisation du formulaire avec:", defaultValues);
       form.reset(defaultValues);
     }
   }, [open, defaultValues, form]);
-  
-  // Observer les changements sur isGroupService
-  const isGroupService = form.watch("isGroupService");
   
   const handleSubmit = async (data: ServiceFormValues) => {
     setIsSubmitting(true);
@@ -109,7 +90,7 @@ export function ServiceForm({
           <DialogDescription>
             {defaultValues?.name 
               ? "Modifiez les détails de votre service existant." 
-              : "Créez un nouveau service à proposer à vos clients."}
+              : "Créez un nouveau service pour vos rendez-vous individuels."}
           </DialogDescription>
         </DialogHeader>
         
@@ -123,7 +104,7 @@ export function ServiceForm({
                 <FormItem>
                   <FormLabel>Nom du service</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="Ex: Coaching individuel, Cours de yoga..." />
+                    <Input {...field} placeholder="Ex: Coaching individuel, Consultation..." />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -164,11 +145,9 @@ export function ServiceForm({
                         max="480"
                         {...field}
                         onChange={(e) => {
-                          // Si le champ est vide, utiliser une valeur par défaut (60) ou laisser vide
                           const value = e.target.value === '' ? '' : parseInt(e.target.value);
                           field.onChange(value);
                         }}
-                        // Convertir explicitement en chaîne pour éviter l'erreur NaN
                         value={typeof field.value === 'undefined' || field.value === null ? '' : String(field.value)}
                       />
                     </FormControl>
@@ -224,55 +203,6 @@ export function ServiceForm({
               )}
             />
             
-            {/* Option service de groupe */}
-            <FormField
-              control={form.control}
-              name="isGroupService"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 p-4 border rounded-md">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Service pour groupe</FormLabel>
-                    <FormDescription>
-                      Ce service permet d'accueillir plusieurs participants (cours collectifs)
-                    </FormDescription>
-                  </div>
-                </FormItem>
-              )}
-            />
-            
-            {/* Nombre maximum de participants (visible uniquement si c'est un service de groupe) */}
-            {isGroupService && (
-              <FormField
-                control={form.control}
-                name="maxParticipants"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre maximum de participants</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number"
-                        min="2"
-                        max="50"
-                        {...field}
-                        onChange={(e) => {
-                          const value = e.target.value === '' ? '' : parseInt(e.target.value);
-                          field.onChange(value);
-                        }}
-                        value={typeof field.value === 'undefined' || field.value === null ? '' : String(field.value)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-            
             {/* Lieu (optionnel) */}
             <FormField
               control={form.control}
@@ -281,8 +211,11 @@ export function ServiceForm({
                 <FormItem>
                   <FormLabel>Lieu (optionnel)</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="Ex: Studio Zen, Salle 3..." />
+                    <Input {...field} placeholder="Ex: Cabinet, domicile, en ligne..." />
                   </FormControl>
+                  <FormDescription>
+                    Indiquez où se déroule le service
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
