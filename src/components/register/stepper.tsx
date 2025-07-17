@@ -1,3 +1,5 @@
+// src/components/register/stepper.tsx
+
 import { UserRole } from "@prisma/client"
 import { cn } from "@/lib/utils"
 
@@ -7,7 +9,6 @@ type StepConfig = {
   subtitle: string;
 };
 
-// Étapes mises à jour sans l'étape "Informations de compte"
 const clientSteps: StepConfig[] = [
   {
     id: 1,
@@ -39,6 +40,11 @@ const professionalSteps: StepConfig[] = [
   },
   {
     id: 4,
+    title: "Horaires",
+    subtitle: "Définissez vos disponibilités"
+  },
+  {
+    id: 5,
     title: "Préférences",
     subtitle: "Configurez votre compte"
   }
@@ -92,7 +98,7 @@ export default function Stepper({ userType, currentStep }: StepperProps) {
                     className={cn(
                       "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium border-2 bg-white transition-colors",
                       isCompleted ? "border-primary bg-primary text-white" : 
-                      isActive ? "border-primary text-primary" :
+                      isActive ? "border-primary text-primary" : 
                       "border-gray-300 text-gray-500"
                     )}
                   >
@@ -100,19 +106,26 @@ export default function Stepper({ userType, currentStep }: StepperProps) {
                   </div>
                 </div>
 
-                {/* Textes en dessous */}
-                <div className="mt-4 text-center min-w-[120px]">
-                  <p
+                {/* Titre et sous-titre */}
+                <div className="mt-3 text-center">
+                  <div
                     className={cn(
-                      "text-sm font-medium truncate",
-                      isActive ? "text-primary" : "text-gray-900"
+                      "text-sm font-medium",
+                      isActive ? "text-primary" : 
+                      isCompleted ? "text-gray-900" : 
+                      "text-gray-500"
                     )}
                   >
                     {step.title}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5 truncate">
+                  </div>
+                  <div
+                    className={cn(
+                      "text-xs mt-1",
+                      isActive ? "text-primary/70" : "text-gray-400"
+                    )}
+                  >
                     {step.subtitle}
-                  </p>
+                  </div>
                 </div>
               </li>
             );

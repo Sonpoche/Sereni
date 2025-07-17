@@ -11,6 +11,14 @@ export interface ServiceData {
   location?: string;
 }
 
+// NOUVEAU : Interface pour les données d'horaires
+export interface ScheduleData {
+  workingDays: number[];
+  startTime: string;
+  endTime: string;
+  isFullWeek: boolean;
+}
+
 // Interface pour les données d'onboarding complètes
 export interface OnboardingData {
   userId: string;
@@ -31,6 +39,7 @@ export interface OnboardingData {
     bio: string;
     approach: string;
   };
+  schedule?: ScheduleData; // NOUVEAU : Données d'horaires
   services?: {
     services: ServiceData[];
   };

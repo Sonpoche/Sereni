@@ -1,4 +1,5 @@
 // src/components/register/steps/personal-info.tsx
+
 "use client"
 
 import { useForm } from "react-hook-form"
@@ -72,7 +73,7 @@ const professionalInfoSchema = z.object({
     .string()
     .regex(
       /^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/,
-      "Numéro de téléphone professionnel invalide"
+      "Numéro de téléphone invalide"
     ),
   // Informations du cabinet/lieu de pratique
   cabinetName: z
@@ -229,7 +230,7 @@ export default function PersonalInfoForm({
         </h1>
         <p className="text-gray-500 text-base">
           {isProfessional 
-            ? "Renseignez les informations de votre cabinet et votre pratique"
+            ? "Renseignez les informations de votre espace et votre pratique"
             : "Ces informations nous permettront de personnaliser votre expérience"
           }
         </p>
@@ -237,7 +238,7 @@ export default function PersonalInfoForm({
 
       <ConseilBox 
         icon={<Lightbulb className="h-5 w-5 text-lavender" />}
-        title={isProfessional ? "Cabinet médical" : "Informations personnelles"}
+        title={isProfessional ? "Cabinet de bien-être" : "Informations personnelles"}
         className="mb-8"
       >
         {isProfessional ? (
@@ -245,7 +246,7 @@ export default function PersonalInfoForm({
             Ces informations concernent votre lieu de pratique professionnel. 
             Elles seront visibles par vos clients pour qu'ils puissent vous localiser et vous contacter.
             <br /><br />
-            <strong>Géolocalisation :</strong> L'adresse de votre cabinet sera automatiquement géolocalisée 
+            <strong>Géolocalisation :</strong> L'adresse de votre espace sera automatiquement géolocalisée 
             pour apparaître dans les recherches de proximité.
           </>
         ) : (
@@ -271,7 +272,7 @@ export default function PersonalInfoForm({
                   </FormLabel>
                   <FormControl>
                     <Input 
-                      placeholder={isProfessional ? "Dr. Jean Dupont" : "Jean Dupont"}
+                      placeholder={isProfessional ? "Marie Dubois" : "Jean Dupont"}
                       className="h-11 bg-white"
                       disabled={isLoading || localLoading}
                       {...field} 
@@ -307,7 +308,7 @@ export default function PersonalInfoForm({
               )}
             />
 
-            {/* Nom du cabinet (professionnels seulement) */}
+            {/* Nom de l'espace (professionnels seulement) */}
             {isProfessional && (
               <FormField
                 control={form.control}
@@ -319,14 +320,14 @@ export default function PersonalInfoForm({
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Cabinet de bien-être Dr. Dupont"
+                        placeholder="Cabinet Marie Dubois"
                         className="h-11 bg-white"
                         disabled={isLoading || localLoading}
                         {...field}
                       />
                     </FormControl>
                     <FormDescription className="text-xs text-gray-500">
-                      Nom affiché pour vos clients (ex: "Cabinet Dr. Martin", "Espace Zen")
+                      Nom affiché pour vos clients (ex: "Cabinet Marie", "Salle de sport Forme", "Espace Zen")
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -346,7 +347,10 @@ export default function PersonalInfoForm({
                   </FormLabel>
                   <FormControl>
                     <Input
-                      placeholder={isProfessional ? "123 avenue de la Santé" : "123 rue de la Paix"}
+                      placeholder={isProfessional ? 
+                        "123 avenue de la Santé" : 
+                        "123 rue de la Paix"
+                      }
                       className="h-11 bg-white"
                       disabled={isLoading || localLoading}
                       {...field}
@@ -360,7 +364,8 @@ export default function PersonalInfoForm({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Ville et Code postal */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="city"
@@ -368,7 +373,6 @@ export default function PersonalInfoForm({
                   <FormItem className="bg-primary/5 rounded-lg p-4">
                     <FormLabel required={isProfessional} icon={<Building className="h-4 w-4" />}>
                       Ville
-                      {!isProfessional && <span className="text-gray-500 text-sm font-normal ml-1">(facultatif)</span>}
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -390,7 +394,6 @@ export default function PersonalInfoForm({
                   <FormItem className="bg-primary/5 rounded-lg p-4">
                     <FormLabel required={isProfessional} icon={<MapPin className="h-4 w-4" />}>
                       Code postal
-                      {!isProfessional && <span className="text-gray-500 text-sm font-normal ml-1">(facultatif)</span>}
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -406,12 +409,11 @@ export default function PersonalInfoForm({
               />
             </div>
 
-            {/* Informations légales (professionnels seulement) */}
+            {/* Informations légales pour les professionnels */}
             {isProfessional && (
-              <div className="space-y-6 pt-6 border-t border-primary/10">
-                <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" />
-                  Informations légales <span className="text-sm font-normal text-gray-500">(facultatif)</span>
+              <div className="border-t pt-6 space-y-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Informations légales (facultatif)
                 </h3>
 
                 <FormField

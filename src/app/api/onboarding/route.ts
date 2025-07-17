@@ -15,6 +15,14 @@ const serviceSchema = z.object({
   location: z.string().optional(),
 })
 
+// NOUVEAU : Schéma pour les horaires
+const scheduleSchema = z.object({
+  workingDays: z.array(z.number().min(0).max(6)),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format d'heure invalide"),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format d'heure invalide"),
+  isFullWeek: z.boolean().optional(),
+})
+
 // Schéma de validation pour les données d'onboarding
 const onboardingSchema = z.object({
   userId: z.string(),
@@ -35,6 +43,7 @@ const onboardingSchema = z.object({
     bio: z.string(),
     approach: z.string(),
   }).optional(),
+  schedule: scheduleSchema.optional(), // NOUVEAU : Schéma horaires
   services: z.object({
     services: z.array(serviceSchema),
   }).optional(),
@@ -172,6 +181,25 @@ export async function POST(request: Request) {
           })
 
           console.log('🟦 [API] Profil professionnel créé, ID:', professional.id)
+
+          // NOUVEAU : Créer les horaires si fournis
+          if (data.schedule && data.schedule.workingDays.length > 0) {
+            console.log('🟦 [API] Création des horaires:', data.schedule)
+
+            const availabilityPromises = data.schedule.workingDays.map(dayOfWeek => 
+              tx.availability.create({
+                data: {
+                  professionalId: professional.id,
+                  dayOfWeek: dayOfWeek,
+                  startTime: data.schedule!.startTime,
+                  endTime: data.schedule!.endTime,
+                }
+              })
+            )
+
+            const createdAvailabilities = await Promise.all(availabilityPromises)
+            console.log('✅ [API] Créneaux horaires créés:', createdAvailabilities.length)
+          }
 
           // Créer les services si fournis
           if (data.services?.services && data.services.services.length > 0) {

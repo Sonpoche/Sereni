@@ -138,6 +138,29 @@ export const authConfig: NextAuthConfig = {
         console.log(`🟦 [Auth:${requestId}] JWT mis à jour avec les données utilisateur`)
       }
       
+      // Si nous avons un ID utilisateur, vérifions l'état actuel de hasProfile
+      if (token.id) {
+        try {
+          // Vérifier hasProfile depuis la base de données
+          const response = await fetch(`${process.env.NEXTAUTH_URL}/api/users/${token.id}`, {
+            headers: {
+              'Cache-Control': 'no-store',
+              'Pragma': 'no-cache'
+            }
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.hasProfile !== undefined && data.hasProfile !== token.hasProfile) {
+              console.log(`🟦 [Auth:${requestId}] Mise à jour de hasProfile dans le token: ${token.hasProfile} -> ${data.hasProfile}`)
+              token.hasProfile = data.hasProfile
+            }
+          }
+        } catch (error) {
+          console.log(`🔴 [Auth:${requestId}] Erreur lors de la vérification de hasProfile:`, error)
+        }
+      }
+      
       // Si nous avons un ID utilisateur, vérifions l'état actuel de l'email
       if (token.id && !token.emailVerified) {
         try {
