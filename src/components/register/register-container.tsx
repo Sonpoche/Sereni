@@ -64,6 +64,13 @@ interface RegisterContainerProps {
   initialRole?: UserRole;
 }
 
+// Clés pour le localStorage
+const STORAGE_KEYS = {
+  FORM_DATA: 'serenibook_onboarding_data',
+  CURRENT_STEP: 'serenibook_onboarding_step',
+  SELECTED_ROLE: 'serenibook_onboarding_role'
+}
+
 export default function RegisterContainer({ 
   initialStep = 1,
   initialRole
@@ -73,8 +80,77 @@ export default function RegisterContainer({
   const [formData, setFormData] = useState<FormData>({})
   const [isLoading, setIsLoading] = useState(false)
   const [estimatedTime, setEstimatedTime] = useState(0)
+  const [hasRestoredData, setHasRestoredData] = useState(false)
   const router = useRouter()
   const { register, completeOnboarding } = useAuth()
+
+  // Restaurer les données depuis le localStorage au montage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        // Restaurer les données du formulaire
+        const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
+        if (savedFormData) {
+          const parsedData = JSON.parse(savedFormData)
+          setFormData(parsedData)
+        }
+
+        // Restaurer l'étape courante (si pas de props initialStep)
+        if (initialStep === 1) {
+          const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
+          if (savedStep) {
+            setCurrentStep(parseInt(savedStep))
+          }
+        }
+
+        // Restaurer le rôle sélectionné (si pas de props initialRole)
+        if (!initialRole) {
+          const savedRole = localStorage.getItem(STORAGE_KEYS.SELECTED_ROLE)
+          if (savedRole && Object.values(UserRole).includes(savedRole as UserRole)) {
+            setSelectedRole(savedRole as UserRole)
+          }
+        }
+
+        setHasRestoredData(true)
+
+        // Afficher un message si des données ont été restaurées
+        const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
+        if (savedFormData || (savedStep && parseInt(savedStep) > 1)) {
+          toast.success("Vos données ont été restaurées !", {
+            description: "Vous pouvez continuer là où vous vous étiez arrêté."
+          })
+        }
+      } catch (error) {
+        console.error('Erreur lors de la restauration des données:', error)
+        // En cas d'erreur, nettoyer le localStorage
+        clearSavedData()
+      }
+    }
+  }, [initialStep, initialRole])
+
+  // Sauvegarder les données à chaque changement
+  useEffect(() => {
+    if (hasRestoredData && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEYS.FORM_DATA, JSON.stringify(formData))
+        localStorage.setItem(STORAGE_KEYS.CURRENT_STEP, currentStep.toString())
+        if (selectedRole) {
+          localStorage.setItem(STORAGE_KEYS.SELECTED_ROLE, selectedRole)
+        }
+      } catch (error) {
+        console.error('Erreur lors de la sauvegarde:', error)
+      }
+    }
+  }, [formData, currentStep, selectedRole, hasRestoredData])
+
+  // Fonction pour nettoyer les données sauvegardées
+  const clearSavedData = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEYS.FORM_DATA)
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_STEP)
+      localStorage.removeItem(STORAGE_KEYS.SELECTED_ROLE)
+    }
+  }
 
   // Calcul du temps estimé basé sur le rôle et l'étape
   useEffect(() => {
@@ -164,7 +240,7 @@ export default function RegisterContainer({
   const currentStepData = steps.find(step => step.id === currentStep)
   const progressPercentage = (currentStep / steps.length) * 100
 
-  // Handlers (identiques à la version précédente)
+  // Handlers avec sauvegarde automatique
   const handleAccountSubmit = async (data: AccountFormData) => {
     if (!selectedRole) return;
     
@@ -177,16 +253,18 @@ export default function RegisterContainer({
         role: selectedRole
       })
 
-      setFormData(prev => ({
-        ...prev,
+      const newFormData = {
+        ...formData,
         account: {
           email: data.email,
           password: data.password
         },
         userId: result.user.id
-      }))
+      }
+      setFormData(newFormData)
 
       if (selectedRole === UserRole.CLIENT) {
+        clearSavedData() // Nettoyer les données après succès
         toast.success("Inscription réussie !")
         router.push("/tableau-de-bord")
       } else {
@@ -239,6 +317,7 @@ export default function RegisterContainer({
       const result = await completeOnboarding(onboardingData)
       
       if (result.success) {
+        clearSavedData() // Nettoyer les données après succès
         toast.success("Profil créé avec succès !")
         router.push("/tableau-de-bord")
       }
@@ -256,12 +335,27 @@ export default function RegisterContainer({
     }
   }
 
+  const handleRoleReset = () => {
+    // Demander confirmation avant de reset
+    if (formData.account || currentStep > 1) {
+      const confirmed = window.confirm(
+        "Êtes-vous sûr de vouloir recommencer ? Vos données seront perdues."
+      )
+      if (!confirmed) return
+    }
+    
+    setSelectedRole(null)
+    setCurrentStep(1)
+    setFormData({})
+    clearSavedData()
+  }
+
   const renderStep = () => {
     switch (currentStep) {
       case 1:
-        return <AccountForm onSubmit={handleAccountSubmit} isLoading={isLoading} />
+        return <AccountForm onSubmit={handleAccountSubmit} isLoading={isLoading} initialData={formData.account} />
       case 2:
-        return <PersonalInfoForm userType={selectedRole!} onSubmit={handlePersonalInfoSubmit} onBack={handleBack} isLoading={isLoading} />
+        return <PersonalInfoForm userType={selectedRole!} onSubmit={handlePersonalInfoSubmit} onBack={handleBack} initialData={formData.personalInfo} isLoading={isLoading} />
       case 3:
         if (selectedRole === UserRole.CLIENT) {
           return (
@@ -279,14 +373,14 @@ export default function RegisterContainer({
             </div>
           )
         } else {
-          return <ActivityForm onSubmit={handleActivitySubmit} onBack={handleBack} isLoading={isLoading} />
+          return <ActivityForm onSubmit={handleActivitySubmit} onBack={handleBack} initialData={formData.activity} isLoading={isLoading} />
         }
       case 4:
-        return <BioForm onSubmit={handleBioSubmit} onBack={handleBack} isLoading={isLoading} />
+        return <BioForm onSubmit={handleBioSubmit} onBack={handleBack} initialData={formData.bio} isLoading={isLoading} />
       case 5:
-        return <ServicesSetup professionalType={formData.activity?.type} onSubmit={handleServicesSubmit} onBack={handleBack} isLoading={isLoading} />
+        return <ServicesSetup professionalType={formData.activity?.type} onSubmit={handleServicesSubmit} onBack={handleBack} initialData={formData.services} isLoading={isLoading} />
       case 6:
-        return <PreferencesForm userType={selectedRole!} onSubmit={handlePreferencesSubmit} onBack={handleBack} isLoading={isLoading} />
+        return <PreferencesForm userType={selectedRole!} onSubmit={handlePreferencesSubmit} onBack={handleBack} initialData={formData.preferences} isLoading={isLoading} />
       default:
         return null
     }
@@ -432,7 +526,7 @@ export default function RegisterContainer({
                 variant="ghost"
                 onClick={() => {
                   if (currentStep === 1) {
-                    setSelectedRole(null)
+                    handleRoleReset()
                   } else {
                     handleBack()
                   }

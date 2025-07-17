@@ -29,6 +29,12 @@ const protectedPaths = [
   "/parametres"
 ]
 
+// Pages qui ne nécessitent pas un profil complet (en plus des publicPaths)
+const allowedIncompleteProfilePaths = [
+  "/profil/completer",
+  "/api/"
+]
+
 export async function middleware(request: NextRequest) {
   // Vérifier si le chemin actuel est public
   const isPublicPath = publicPaths.some(path => 
@@ -37,6 +43,11 @@ export async function middleware(request: NextRequest) {
 
   // Vérifier si le chemin actuel est protégé
   const isProtectedPath = protectedPaths.some(path => 
+    request.nextUrl.pathname.startsWith(path)
+  )
+
+  // Vérifier si c'est un chemin autorisé pour profil incomplet
+  const isAllowedIncompleteProfilePath = allowedIncompleteProfilePaths.some(path => 
     request.nextUrl.pathname.startsWith(path)
   )
 
@@ -59,6 +70,11 @@ export async function middleware(request: NextRequest) {
 
   // Si l'utilisateur est sur une page publique et est connecté
   if (session && (request.nextUrl.pathname === "/connexion" || request.nextUrl.pathname === "/inscription")) {
+    // Si profil incomplet, rediriger vers profil/completer
+    if (!session.user.hasProfile) {
+      return NextResponse.redirect(new URL("/profil/completer", request.url))
+    }
+    // Sinon rediriger vers tableau de bord
     return NextResponse.redirect(new URL("/tableau-de-bord", request.url))
   }
 
@@ -73,6 +89,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(
       new URL(`/connexion?callbackUrl=${encodedCallbackUrl}`, request.url)
     )
+  }
+
+  // NOUVELLE LOGIQUE : Si connecté mais profil incomplet
+  if (session && !session.user.hasProfile && !isAllowedIncompleteProfilePath && !isPublicPath) {
+    console.log(`🔄 [Middleware] Redirection vers profil/completer - Profil incomplet pour ${session.user.email}`)
+    return NextResponse.redirect(new URL("/profil/completer", request.url))
   }
 
   return NextResponse.next()

@@ -12,8 +12,8 @@ interface ConseilBoxProps {
 export function ConseilBox({ 
   children, 
   className,
-  icon = <Sparkles className="h-4 w-4 text-lavender" />,
-  title = "Conseil"
+  icon = <Sparkles className="h-5 w-5 text-lavender" />,
+  title
 }: ConseilBoxProps) {
   return (
     <div className={cn(
@@ -21,14 +21,18 @@ export function ConseilBox({
       className
     )}>
       <div className="flex items-start gap-3">
-        <div className="p-1">
+        {/* Container icône avec alignement parfait */}
+        <div className="flex-shrink-0 mt-0.5">
           {icon}
         </div>
-        <div>
-          {title && title !== "Conseil" && (
-            <h3 className="text-sm font-medium text-lavender-dark mb-1">{title}</h3>
+        
+        <div className="flex-1">
+          {title && (
+            <h3 className="text-2xl font-semibold text-lavender-dark mb-2 leading-tight">
+              {title}
+            </h3>
           )}
-          <div className="text-sm text-lavender-dark/90">
+          <div className="text-sm text-lavender-dark/90 leading-relaxed">
             {children}
           </div>
         </div>

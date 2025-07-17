@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { ConseilBox } from "@/components/ui/conseil-box"
 import { 
   Form, 
   FormControl, 
@@ -28,7 +29,8 @@ import {
   MapPin,
   Lightbulb,
   Sparkles,
-  Copy
+  Copy,
+  Users
 } from "lucide-react"
 
 // Schéma pour un service individuel
@@ -57,36 +59,36 @@ const PRESET_COLORS = [
 // Services suggérés selon le type de professionnel
 const SERVICE_TEMPLATES = {
   "LIFE_COACH": [
-    { name: "Séance de coaching individuel", description: "Accompagnement personnalisé pour atteindre vos objectifs de vie", duration: 60, price: 80, color: "#6746c3" },
-    { name: "Consultation découverte", description: "Premier entretien pour faire connaissance et définir vos besoins", duration: 45, price: 50, color: "#3b82f6" },
-    { name: "Coaching de couple", description: "Séance d'accompagnement pour couples", duration: 90, price: 120, color: "#ec4899" },
+    { name: "Séance de coaching individuel", description: "Accompagnement personnalisé pour atteindre vos objectifs de vie", duration: 60, price: 80, color: "#6746c3", location: "" },
+    { name: "Consultation découverte", description: "Premier entretien pour faire connaissance et définir vos besoins", duration: 45, price: 50, color: "#3b82f6", location: "" },
+    { name: "Coaching de couple", description: "Séance d'accompagnement pour couples", duration: 90, price: 120, color: "#ec4899", location: "" },
   ],
   "PERSONAL_COACH": [
-    { name: "Entraînement personnel", description: "Séance de sport individuelle adaptée à vos objectifs", duration: 60, price: 60, color: "#ef4444" },
-    { name: "Bilan forme et nutrition", description: "Évaluation complète de votre condition physique", duration: 90, price: 80, color: "#f59e0b" },
-    { name: "Coaching en petit groupe", description: "Entraînement en groupe de 2-4 personnes", duration: 60, price: 40, color: "#84cc16" },
+    { name: "Entraînement personnel", description: "Séance de sport individuelle adaptée à vos objectifs", duration: 60, price: 60, color: "#ef4444", location: "" },
+    { name: "Bilan forme et nutrition", description: "Évaluation complète de votre condition physique", duration: 90, price: 80, color: "#f59e0b", location: "" },
+    { name: "Coaching en petit groupe", description: "Entraînement en groupe de 2-4 personnes", duration: 60, price: 40, color: "#84cc16", location: "" },
   ],
   "YOGA_TEACHER": [
-    { name: "Cours de yoga individuel", description: "Séance de yoga personnalisée selon votre niveau", duration: 60, price: 70, color: "#10b981" },
-    { name: "Cours de yoga en duo", description: "Séance de yoga pour deux personnes", duration: 75, price: 90, color: "#06b6d4" },
-    { name: "Initiation au yoga", description: "Première séance pour découvrir le yoga", duration: 45, price: 50, color: "#8b5cf6" },
+    { name: "Cours de yoga individuel", description: "Séance de yoga personnalisée selon votre niveau", duration: 60, price: 70, color: "#10b981", location: "" },
+    { name: "Cours de yoga en duo", description: "Séance de yoga pour deux personnes", duration: 75, price: 90, color: "#06b6d4", location: "" },
+    { name: "Initiation au yoga", description: "Première séance pour découvrir le yoga", duration: 45, price: 50, color: "#8b5cf6", location: "" },
   ],
   "THERAPIST": [
-    { name: "Séance de thérapie individuelle", description: "Accompagnement thérapeutique personnalisé", duration: 50, price: 70, color: "#6746c3" },
-    { name: "Première consultation", description: "Entretien initial pour établir le diagnostic", duration: 60, price: 80, color: "#3b82f6" },
-    { name: "Thérapie de couple", description: "Accompagnement thérapeutique pour couples", duration: 90, price: 110, color: "#ec4899" },
+    { name: "Séance de thérapie individuelle", description: "Accompagnement thérapeutique personnalisé", duration: 50, price: 70, color: "#6746c3", location: "" },
+    { name: "Première consultation", description: "Entretien initial pour établir le diagnostic", duration: 60, price: 80, color: "#3b82f6", location: "" },
+    { name: "Thérapie de couple", description: "Accompagnement thérapeutique pour couples", duration: 90, price: 110, color: "#ec4899", location: "" },
   ],
   "MASSAGE_THERAPIST": [
-    { name: "Massage relaxant", description: "Massage de détente pour éliminer le stress", duration: 60, price: 60, color: "#06b6d4" },
-    { name: "Massage thérapeutique", description: "Massage ciblé pour soulager les douleurs", duration: 45, price: 70, color: "#ef4444" },
-    { name: "Massage complet du corps", description: "Massage relaxant de tout le corps", duration: 90, price: 90, color: "#8b5cf6" },
+    { name: "Massage relaxant", description: "Massage de détente pour éliminer le stress", duration: 60, price: 60, color: "#06b6d4", location: "" },
+    { name: "Massage thérapeutique", description: "Massage ciblé pour soulager les douleurs", duration: 45, price: 70, color: "#ef4444", location: "" },
+    { name: "Massage complet du corps", description: "Massage relaxant de tout le corps", duration: 90, price: 90, color: "#8b5cf6", location: "" },
   ],
   "OTHER": [
-    { name: "Consultation personnalisée", description: "Séance individuelle adaptée à vos besoins", duration: 60, price: 60, color: "#6746c3" },
-    { name: "Première rencontre", description: "Entretien découverte pour définir vos objectifs", duration: 45, price: 40, color: "#3b82f6" },
+    { name: "Consultation personnalisée", description: "Séance individuelle adaptée à vos besoins", duration: 60, price: 60, color: "#6746c3", location: "" },
+    { name: "Première rencontre", description: "Entretien découverte pour définir vos objectifs", duration: 45, price: 40, color: "#3b82f6", location: "" },
   ],
   "default": [
-    { name: "Consultation", description: "Séance individuelle personnalisée", duration: 60, price: 60, color: "#6746c3" },
+    { name: "Consultation", description: "Séance individuelle personnalisée", duration: 60, price: 60, color: "#6746c3", location: "" },
   ]
 }
 
@@ -94,6 +96,7 @@ interface ServicesSetupProps {
   onSubmit: (data: ServicesFormData) => void
   onBack: () => void
   professionalType?: string
+  initialData?: Partial<ServicesFormData>
   isLoading?: boolean
 }
 
@@ -101,6 +104,7 @@ export default function ServicesSetup({
   onSubmit, 
   onBack, 
   professionalType = "default",
+  initialData,
   isLoading = false 
 }: ServicesSetupProps) {
   const [showTemplates, setShowTemplates] = useState(true)
@@ -110,7 +114,14 @@ export default function ServicesSetup({
   const form = useForm<ServicesFormData>({
     resolver: zodResolver(servicesFormSchema),
     defaultValues: {
-      services: [templates[0]] // Commencer avec le premier template
+      services: initialData?.services || [{
+        name: templates[0]?.name || "",
+        description: templates[0]?.description || "",
+        duration: templates[0]?.duration || 60,
+        price: templates[0]?.price || 0,
+        color: templates[0]?.color || "#6746c3",
+        location: templates[0]?.location || ""
+      }]
     }
   })
 
@@ -131,7 +142,14 @@ export default function ServicesSetup({
   }
 
   const useTemplate = (template: typeof templates[0]) => {
-    append(template)
+    append({
+      name: template.name,
+      description: template.description,
+      duration: template.duration,
+      price: template.price,
+      color: template.color,
+      location: template.location
+    })
   }
 
   const removeService = (index: number) => {
@@ -154,26 +172,21 @@ export default function ServicesSetup({
         </p>
       </div>
 
-      {/* Information complémentaire */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <div className="flex items-start gap-4">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Lightbulb className="h-5 w-5 text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-blue-900 mb-2">Services individuels vs cours collectifs</h3>
-            <p className="text-blue-800 mb-3">
-              Les services que vous créez ici sont pour des <strong>rendez-vous individuels</strong> avec vos clients.
-            </p>
-            <div className="bg-blue-100 rounded-lg p-3">
-              <p className="text-sm text-blue-700">
-                <strong>Cours collectifs :</strong> Après votre inscription, vous pourrez créer des cours collectifs 
-                depuis votre tableau de bord pour proposer des séances en groupe.
-              </p>
-            </div>
-          </div>
+      {/* Information complémentaire avec couleurs lavande */}
+      <ConseilBox 
+        icon={<Lightbulb className="h-5 w-5" />}
+        title="Services individuels vs cours collectifs"
+      >
+        <p className="mb-3">
+          Les services que vous créez ici sont pour des <strong>rendez-vous individuels</strong> avec vos clients.
+        </p>
+        <div className="bg-lavender/10 rounded-lg p-3">
+          <p className="text-sm">
+            <strong>Cours collectifs :</strong> Après votre inscription, vous pourrez créer des cours collectifs 
+            depuis votre tableau de bord pour proposer des séances en groupe.
+          </p>
         </div>
-      </div>
+      </ConseilBox>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">

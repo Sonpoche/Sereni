@@ -51,9 +51,17 @@ type AccountFormData = z.infer<typeof accountSchema>;
 interface AccountFormProps {
   onSubmit: (data: AccountFormData) => void;
   isLoading?: boolean;
+  initialData?: {
+    email?: string;
+    password?: string;
+  };
 }
 
-export default function AccountForm({ onSubmit, isLoading = false }: AccountFormProps) {
+export default function AccountForm({ 
+  onSubmit, 
+  isLoading = false,
+  initialData 
+}: AccountFormProps) {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,9 +69,9 @@ export default function AccountForm({ onSubmit, isLoading = false }: AccountForm
   const form = useForm<AccountFormData>({
     resolver: zodResolver(accountSchema),
     defaultValues: {
-      email: "",
-      password: "",
-      confirmPassword: ""
+      email: initialData?.email || "",
+      password: initialData?.password || "",
+      confirmPassword: initialData?.password || ""
     }
   });
 
@@ -122,10 +130,11 @@ export default function AccountForm({ onSubmit, isLoading = false }: AccountForm
       </div>
 
       <ConseilBox 
-        icon={<Lightbulb className="h-5 w-5 text-lavender" />}
+        icon={<Lightbulb className="h-5 w-5" />}
+        title="Sauvegarde automatique"
         className="mb-8"
       >
-        Choisissez un mot de passe sécurisé contenant au moins une lettre majuscule,
+        Vos données sont automatiquement sauvegardées. Choisissez un mot de passe sécurisé contenant au moins une lettre majuscule,
         un chiffre et un caractère spécial pour protéger votre compte.
       </ConseilBox>
 

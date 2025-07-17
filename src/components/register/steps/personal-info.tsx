@@ -1,5 +1,4 @@
 // src/components/register/steps/personal-info.tsx
-
 "use client"
 
 import { useForm } from "react-hook-form"
@@ -29,7 +28,8 @@ import {
   Globe,
   FileText,
   Briefcase,
-  MapPinned
+  MapPinned,
+  Lightbulb
 } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { useState } from "react"
@@ -106,6 +106,7 @@ interface PersonalInfoFormProps {
   userType: UserRole;
   onSubmit: (data: any) => void;
   onBack: () => void;
+  initialData?: any;
   isLoading?: boolean;
 }
 
@@ -113,6 +114,7 @@ export default function PersonalInfoForm({
   userType, 
   onSubmit, 
   onBack,
+  initialData,
   isLoading = false 
 }: PersonalInfoFormProps) {
   const { data: session } = useSession();
@@ -125,20 +127,20 @@ export default function PersonalInfoForm({
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: isProfessional ? {
-      name: "",
-      phone: "",
-      cabinetName: "",
-      address: "",
-      city: "",
-      postalCode: "",
-      siret: "",
-      website: ""
+      name: initialData?.name || "",
+      phone: initialData?.phone || "",
+      cabinetName: initialData?.cabinetName || "",
+      address: initialData?.address || "",
+      city: initialData?.city || "",
+      postalCode: initialData?.postalCode || "",
+      siret: initialData?.siret || "",
+      website: initialData?.website || ""
     } : {
-      name: "",
-      phone: "",
-      address: "",
-      city: "",
-      postalCode: ""
+      name: initialData?.name || "",
+      phone: initialData?.phone || "",
+      address: initialData?.address || "",
+      city: initialData?.city || "",
+      postalCode: initialData?.postalCode || ""
     }
   });
 
@@ -233,10 +235,14 @@ export default function PersonalInfoForm({
         </p>
       </div>
 
-      <ConseilBox className="mb-8">
+      <ConseilBox 
+        icon={<Lightbulb className="h-5 w-5 text-lavender" />}
+        title={isProfessional ? "Cabinet médical" : "Informations personnelles"}
+        className="mb-8"
+      >
         {isProfessional ? (
           <>
-            <strong>Cabinet médical :</strong> Ces informations concernent votre lieu de pratique professionnel. 
+            Ces informations concernent votre lieu de pratique professionnel. 
             Elles seront visibles par vos clients pour qu'ils puissent vous localiser et vous contacter.
             <br /><br />
             <strong>Géolocalisation :</strong> L'adresse de votre cabinet sera automatiquement géolocalisée 

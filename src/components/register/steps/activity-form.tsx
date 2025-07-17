@@ -1,3 +1,4 @@
+// src/components/register/steps/activity-form.tsx
 "use client"
 
 import { useForm } from "react-hook-form"
@@ -50,7 +51,11 @@ type ActivityData = z.infer<typeof activitySchema>;
 interface ActivityFormProps {
   onSubmit: (data: ActivityData) => void;
   onBack: () => void;
-  initialData?: Partial<ActivityData>;
+  initialData?: Partial<{
+    type: string;
+    otherTypeDetails?: string;
+    experience: number;
+  }>;
   isLoading?: boolean;
 }
 
@@ -63,13 +68,25 @@ export default function ActivityForm({
   const form = useForm<ActivityData>({
     resolver: zodResolver(activitySchema),
     defaultValues: {
-      type: initialData?.type || undefined,
+      type: (initialData?.type as ProfessionalType) || undefined,
       otherTypeDetails: initialData?.otherTypeDetails || "",
       experience: initialData?.experience || 0
     }
   });
 
   const selectedType = form.watch("type");
+
+  const handleSubmit = (data: ActivityData) => {
+    // Validation supplémentaire pour AUTRE
+    if (data.type === ProfessionalType.AUTRE && !data.otherTypeDetails?.trim()) {
+      form.setError("otherTypeDetails", {
+        type: "required",
+        message: "Veuillez préciser votre type d'activité"
+      });
+      return;
+    }
+    onSubmit(data);
+  };
 
   return (
     <div className="max-w-xl mx-auto">
@@ -83,7 +100,8 @@ export default function ActivityForm({
       </div>
 
       <ConseilBox 
-        icon={<Lightbulb className="h-5 w-5 text-lavender" />}
+        icon={<Lightbulb className="h-5 w-5" />}
+        title="Définir votre activité"
         className="mb-8"
       >
         Ces informations nous permettent d'orienter les clients vers les
@@ -93,7 +111,7 @@ export default function ActivityForm({
       {/* Container principal avec bordure verte */}
       <div className="bg-white border border-primary/20 rounded-xl p-8">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
             <FormField
               control={form.control}
               name="type"
@@ -107,7 +125,7 @@ export default function ActivityForm({
                   </FormDescription>
                   <Select 
                     onValueChange={field.onChange} 
-                    defaultValue={field.value}
+                    value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
