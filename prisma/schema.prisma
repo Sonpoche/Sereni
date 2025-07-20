@@ -40,6 +40,31 @@ enum PaymentStatus {
   FAILED
 }
 
+// ==================== NOUVEAUX ENUMS POUR ABONNEMENTS ====================
+
+enum SubscriptionStatus {
+  active
+  past_due
+  canceled
+  incomplete
+  incomplete_expired
+  unpaid
+}
+
+enum SubscriptionPlan {
+  standard
+  premium
+}
+
+enum CancelationStatus {
+  pending
+  approved
+  denied
+  resolved
+}
+
+// ==================== MODÈLES EXISTANTS ====================
+
 model ResetToken {
   id        String   @id @default(cuid())
   token     String   @unique
@@ -60,8 +85,12 @@ model User {
   password      String?
   image         String?
   role          UserRole  @default(CLIENT)
-  isFirstVisit    Boolean   @default(true)
+  isFirstVisit  Boolean   @default(true)
   hasProfile    Boolean   @default(false)
+  
+  // NOUVEAU : Stripe Customer ID pour abonnements
+  stripeCustomerId String? @unique
+  
   accounts      Account[]
   sessions      Session[]
   resetTokens   ResetToken[]
@@ -69,8 +98,12 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // Relations avec suppression en cascade
-  clientProfile    Client?       @relation("UserToClient")
+  clientProfile       Client?       @relation("UserToClient")
   professionalProfile Professional? @relation("UserToProfessional")
+  
+  // NOUVELLES RELATIONS : Abonnements
+  subscription        Subscription?
+  cancelationRequests CancelationRequest[]
 }
 
 model Account {
@@ -107,6 +140,64 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// ==================== NOUVEAUX MODÈLES : ABONNEMENTS ====================
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  
+  // Stripe IDs
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  
+  // Statut et plan
+  status               SubscriptionStatus @default(incomplete)
+  plan                 SubscriptionPlan   @default(standard)
+  
+  // Période et annulation
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  
+  // Métadonnées
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  // Relations
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cancelationRequests  CancelationRequest[]
+
+  @@map("subscriptions")
+}
+
+model CancelationRequest {
+  id                String            @id @default(cuid())
+  userId            String
+  subscriptionId    String
+  
+  // Informations de la demande
+  reason            String            // Prix, fonctionnalités, concurrence, etc.
+  feedback          String?           @db.Text
+  contactPreference String            @default("email") // email, phone, chat
+  
+  // Statut et traitement
+  status            CancelationStatus @default(pending)
+  adminResponse     String?           @db.Text
+  adminUserId       String?           // Qui a traité la demande
+  
+  // Dates
+  requestedAt       DateTime          @default(now())
+  processedAt       DateTime?
+  
+  // Relations
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription      Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("cancelation_requests")
+}
+
+// ==================== MODÈLES EXISTANTS (INCHANGÉS) ====================
 
 model Professional {
   id              String    @id @default(cuid())
@@ -445,9 +536,6 @@ model InvoiceSettings {
   
   professional    Professional @relation("ProfessionalToInvoiceSettings", fields: [professionalId], references: [id], onDelete: Cascade)
 }
-
-// prisma/schema.prisma
-// Remplacer le modèle NotificationSettings existant par celui-ci
 
 model NotificationSettings {
   id              String    @id @default(cuid())
