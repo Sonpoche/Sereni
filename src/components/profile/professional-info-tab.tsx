@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { ProfessionalType, professionalTypeLabels } from "@/types/professional"
+import { ProfessionalType, professionalTypeLabels, apiToProfessionalType } from "@/types/professional"
 import { 
   Loader2, 
   Briefcase, 
@@ -76,9 +76,14 @@ export default function ProfessionalInfoTab({ profileData, setProfileData }: Pro
   const { data: session } = useSession()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Convertir la valeur API en valeur frontend pour le type d'activité
+  const convertedType = profileData?.professionalProfile?.type 
+    ? apiToProfessionalType[profileData.professionalProfile.type] || ProfessionalType.AUTRE
+    : "";
+
   // Préparer les valeurs par défaut du formulaire
   const defaultValues: Partial<ProfessionalInfoFormValues> = {
-    type: profileData?.professionalProfile?.type || "",
+    type: convertedType,
     otherTypeDetails: profileData?.professionalProfile?.otherTypeDetails || "",
     yearsExperience: profileData?.professionalProfile?.yearsExperience || 0,
     bio: profileData?.professionalProfile?.bio || "",
@@ -185,7 +190,7 @@ export default function ProfessionalInfoTab({ profileData, setProfileData }: Pro
                   <FormControl>
                     <Select 
                       onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      value={field.value}
                     >
                       <SelectTrigger className="h-12 border-gray-200">
                         <SelectValue placeholder="Sélectionnez" />
