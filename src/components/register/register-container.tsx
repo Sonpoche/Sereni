@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react"
 import { UserRole } from "@prisma/client"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSession } from "next-auth/react" // ✅ AJOUTÉ
+import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { User, Users, ArrowLeft, Check, Clock, Users2, Calendar, Zap, Shield, Sparkles } from "lucide-react"
@@ -19,6 +19,7 @@ import ServicesSetup from "./steps/services-setup"
 import type { PreferencesFormData } from "./steps/preferences-form"
 import { cn } from "@/lib/utils"
 
+// ✅ Interface FormData corrigée avec schedule
 interface FormData {
   account?: {
     email: string;
@@ -51,6 +52,13 @@ interface FormData {
       location?: string;
     }>;
   };
+  // ✅ AJOUT : Interface schedule manquante
+  schedule?: {
+    workingDays: number[];
+    startTime: string;
+    endTime: string;
+    isFullWeek: boolean;
+  };
   userId?: string;
 }
 
@@ -76,7 +84,7 @@ export default function RegisterContainer({
   initialStep = 1,
   initialRole
 }: RegisterContainerProps) {
-  const { data: session, status } = useSession() // ✅ AJOUTÉ
+  const { data: session, status } = useSession()
   const searchParams = useSearchParams()
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(initialRole || null)
   const [currentStep, setCurrentStep] = useState(initialStep)
@@ -84,19 +92,57 @@ export default function RegisterContainer({
   const [isLoading, setIsLoading] = useState(false)
   const [estimatedTime, setEstimatedTime] = useState(0)
   const [hasRestoredData, setHasRestoredData] = useState(false)
+  const [userIdFixed, setUserIdFixed] = useState(false) // ✅ AJOUT : Protection contre boucle infinie
   const router = useRouter()
   const { register, completeOnboarding } = useAuth()
 
   // Récupérer le plan depuis l'URL
   const selectedPlan = searchParams.get('plan') as 'standard' | 'premium' | null
 
-  // ✅ MODIFIÉ: Restaurer les données avec vérification de session
+  // Restaurer les données avec vérification de session
   useEffect(() => {
+    console.log('🔄 [RegisterContainer] useEffect déclenché avec:', {
+      status,
+      'session?.user?.id': session?.user?.id,
+      'formData.userId': formData.userId,
+      userIdFixed,
+      hasRestoredData
+    })
+    
     if (typeof window !== 'undefined') {
       try {
+        console.log('🟦 [RegisterContainer] ================================')
+        console.log('🟦 [RegisterContainer] DÉBUT useEffect restauration')
+        console.log('🟦 [RegisterContainer] ================================')
+        console.log('🟦 [RegisterContainer] status:', status)
+        console.log('🟦 [RegisterContainer] session:', session)
+        console.log('🟦 [RegisterContainer] initialStep:', initialStep)
+        console.log('🟦 [RegisterContainer] initialRole:', initialRole)
+        
+        // ✅ CORRECTION MAJEURE : Si l'utilisateur est connecté mais pas d'userId dans formData
+        if (status === "authenticated" && session?.user?.id && !formData.userId && !userIdFixed) {
+          console.log('🟨 [RegisterContainer] CORRECTION: Utilisateur connecté sans userId dans formData')
+          console.log('🟨 [RegisterContainer] Récupération userId depuis session:', session.user.id)
+          
+          // Mettre à jour le formData avec l'userId de la session
+          const newFormData = {
+            ...formData,
+            userId: session.user.id
+          }
+          
+          console.log('🟨 [RegisterContainer] Mise à jour formData avec userId de session')
+          setFormData(newFormData)
+          setUserIdFixed(true) // ✅ Marquer comme corrigé pour éviter la boucle
+          setHasRestoredData(true)
+          return
+        }
+
         // Vérifier d'abord si l'utilisateur est connecté
         const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
         const savedUserId = savedFormData ? JSON.parse(savedFormData).userId : null
+        
+        console.log('🟦 [RegisterContainer] savedFormData:', savedFormData)
+        console.log('🟦 [RegisterContainer] savedUserId:', savedUserId)
         
         // Si on a un userId sauvegardé mais qu'aucune session n'est active, nettoyer
         if (savedUserId && status === "unauthenticated") {
@@ -117,17 +163,19 @@ export default function RegisterContainer({
         // Restaurer les données seulement si l'utilisateur est connecté ET correspond
         if (savedFormData && (status === "authenticated" || status === "loading")) {
           const parsedData = JSON.parse(savedFormData)
+          console.log('🟦 [RegisterContainer] Restauration données localStorage:', parsedData)
           setFormData(parsedData)
         }
 
-        // ✅ CORRECTION: Restaurer l'étape seulement si on n'a pas d'initialStep ET si on n'est pas en train de créer un compte
-        if (initialStep === 1 && !isLoading) { // ✅ AJOUTÉ: !isLoading pour éviter l'interférence
+        // Restaurer l'étape seulement si on n'a pas d'initialStep ET si on n'est pas en train de créer un compte
+        if (initialStep === 1 && !isLoading) {
           const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
           // Restaurer l'étape seulement si on a un userId correspondant
           if (savedStep && (status === "authenticated" || (savedUserId && status === "loading"))) {
             const stepNumber = parseInt(savedStep)
-            // ✅ SÉCURITÉ: Ne pas revenir en arrière si on est déjà plus loin
+            // Ne pas revenir en arrière si on est déjà plus loin
             if (stepNumber > currentStep) {
+              console.log('🟦 [RegisterContainer] Restauration étape:', stepNumber)
               setCurrentStep(stepNumber)
             }
           }
@@ -137,6 +185,7 @@ export default function RegisterContainer({
         if (!initialRole) {
           const savedRole = localStorage.getItem(STORAGE_KEYS.SELECTED_ROLE)
           if (savedRole && Object.values(UserRole).includes(savedRole as UserRole)) {
+            console.log('🟦 [RegisterContainer] Restauration rôle:', savedRole)
             setSelectedRole(savedRole as UserRole)
           }
         }
@@ -150,15 +199,17 @@ export default function RegisterContainer({
             description: "Vous pouvez continuer là où vous vous étiez arrêté."
           })
         }
+        
+        console.log('🟦 [RegisterContainer] ✅ Fin useEffect restauration')
       } catch (error) {
-        console.error('Erreur lors de la restauration des données:', error)
+        console.error('🔴 [RegisterContainer] Erreur lors de la restauration des données:', error)
         clearSavedData()
         setHasRestoredData(true)
       }
     }
-  }, [initialStep, initialRole, status, session, isLoading]) // ✅ AJOUTÉ: isLoading aux dépendances
+  }, [initialStep, initialRole, status, session, isLoading]) // ✅ SUPPRESSION de formData.userId des dépendances
 
-  // ✅ NOUVEAU: Nettoyer automatiquement si l'utilisateur se déconnecte
+  // Nettoyer automatiquement si l'utilisateur se déconnecte
   useEffect(() => {
     if (status === "unauthenticated" && hasRestoredData) {
       const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
@@ -176,13 +227,28 @@ export default function RegisterContainer({
   useEffect(() => {
     if (hasRestoredData && typeof window !== 'undefined') {
       try {
+        console.log('🟦 [RegisterContainer] 💾 Sauvegarde localStorage...')
+        console.log('🟦 [RegisterContainer] - formData à sauvegarder:', JSON.stringify(formData, null, 2))
+        console.log('🟦 [RegisterContainer] - formData.userId:', formData.userId)
+        console.log('🟦 [RegisterContainer] - currentStep:', currentStep)
+        console.log('🟦 [RegisterContainer] - selectedRole:', selectedRole)
+        
         localStorage.setItem(STORAGE_KEYS.FORM_DATA, JSON.stringify(formData))
         localStorage.setItem(STORAGE_KEYS.CURRENT_STEP, currentStep.toString())
         if (selectedRole) {
           localStorage.setItem(STORAGE_KEYS.SELECTED_ROLE, selectedRole)
         }
+        
+        console.log('🟦 [RegisterContainer] ✅ Sauvegarde localStorage terminée')
+        
+        // Vérifier immédiatement que la sauvegarde a fonctionné
+        const savedData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
+        if (savedData) {
+          const parsed = JSON.parse(savedData)
+          console.log('🟦 [RegisterContainer] 🔍 Vérification sauvegarde - userId dans localStorage:', parsed.userId)
+        }
       } catch (error) {
-        console.error('Erreur lors de la sauvegarde:', error)
+        console.error('🔴 [RegisterContainer] Erreur lors de la sauvegarde:', error)
       }
     }
   }, [formData, currentStep, selectedRole, hasRestoredData])
@@ -290,6 +356,12 @@ export default function RegisterContainer({
     
     setIsLoading(true)
     try {
+      console.log('🟦 [RegisterContainer] ================================')
+      console.log('🟦 [RegisterContainer] DÉBUT handleAccountSubmit')
+      console.log('🟦 [RegisterContainer] ================================')
+      console.log('🟦 [RegisterContainer] Début création compte pour:', data.email)
+      console.log('🟦 [RegisterContainer] selectedRole:', selectedRole)
+      
       const result = await register({
         email: data.email,
         password: data.password,
@@ -297,30 +369,71 @@ export default function RegisterContainer({
         role: selectedRole
       })
 
+      console.log('🟦 [RegisterContainer] ✅ Résultat inscription COMPLET:', JSON.stringify(result, null, 2))
+
+      // ✅ CORRECTION : Vérifier que nous avons bien l'userId
+      if (!result?.user?.id) {
+        console.error('🔴 [RegisterContainer] ❌ Pas d\'userId dans la réponse!')
+        console.error('🔴 [RegisterContainer] Structure result:', result)
+        console.error('🔴 [RegisterContainer] result.user:', result?.user)
+        throw new Error("Erreur lors de la création du compte - ID utilisateur manquant dans la réponse")
+      }
+
+      const userId = result.user.id
+      console.log('🟦 [RegisterContainer] ✅ userId récupéré avec succès:', userId)
+
       const newFormData = {
         ...formData,
         account: {
           email: data.email,
           password: data.password
         },
-        userId: result.user.id
+        userId: userId
       }
+      
+      console.log('🟦 [RegisterContainer] ✅ Nouveau FormData créé:')
+      console.log('🟦 [RegisterContainer] - userId:', newFormData.userId)
+      console.log('🟦 [RegisterContainer] - account:', newFormData.account)
+      console.log('🟦 [RegisterContainer] - FormData complet:', JSON.stringify(newFormData, null, 2))
+      
       setFormData(newFormData)
+      console.log('🟦 [RegisterContainer] ✅ FormData mis à jour dans le state')
+
+      // Vérifier que le state a bien été mis à jour
+      setTimeout(() => {
+        console.log('🟦 [RegisterContainer] 🔍 Vérification formData après setState...')
+        console.log('🟦 [RegisterContainer] formData.userId après setState:', formData.userId)
+      }, 100)
 
       if (selectedRole === UserRole.CLIENT) {
         clearSavedData()
         toast.success("Inscription réussie !")
         router.push("/tableau-de-bord")
       } else {
-        // ✅ CORRECTION: Utiliser setTimeout pour s'assurer que le changement d'étape se fait après la mise à jour de session
         toast.success("Compte créé avec succès ! Continuons votre configuration.")
         setTimeout(() => {
           setCurrentStep(2)
-        }, 100) // Petit délai pour éviter les conflits de state
+        }, 100)
       }
     } catch (error) {
-      console.error(error)
-      toast.error("Une erreur est survenue lors de la création du compte")
+      console.error('🔴 [RegisterContainer] ================================')
+      console.error('🔴 [RegisterContainer] ERREUR dans handleAccountSubmit')
+      console.error('🔴 [RegisterContainer] ================================')
+      console.error('🔴 [RegisterContainer] Error object:', error)
+      console.error('🔴 [RegisterContainer] Erreur lors de la création du compte:', error)
+      
+      // ✅ Messages d'erreur plus spécifiques
+      if (error instanceof Error) {
+        if (error.message.includes("ID utilisateur manquant")) {
+          toast.error("Erreur technique lors de la création du compte. Veuillez réessayer.")
+        } else if (error.message.includes("existe déjà")) {
+          toast.error("Un compte existe déjà avec cet email.")
+        } else {
+          toast.error(error.message)
+        }
+      } else {
+        toast.error("Une erreur inattendue s'est produite lors de la création du compte")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -346,42 +459,133 @@ export default function RegisterContainer({
     setCurrentStep(6)
   }
 
-  // Gestion du paiement après l'onboarding
+  // ✅ CORRECTION : Gestion du paiement après l'onboarding avec données complètes
   const handlePreferencesSubmit = async (data: PreferencesFormData) => {
+    console.log('🟦 [RegisterContainer] ================================')
+    console.log('🟦 [RegisterContainer] 🚀 DÉBUT handlePreferencesSubmit')
+    console.log('🟦 [RegisterContainer] ================================')
+    console.log('🟦 [RegisterContainer] 📊 ÉTAT INITIAL:')
+    console.log('🟦 [RegisterContainer] - selectedRole:', selectedRole)
+    console.log('🟦 [RegisterContainer] - selectedPlan:', selectedPlan)
+    console.log('🟦 [RegisterContainer] - session?.user?.id:', session?.user?.id)
+    console.log('🟦 [RegisterContainer] - session status:', status)
+    console.log('🟦 [RegisterContainer] - userIdFixed:', userIdFixed)
+    console.log('🟦 [RegisterContainer] - hasRestoredData:', hasRestoredData)
+    console.log('🟦 [RegisterContainer] - formData.userId AVANT:', formData.userId)
+    console.log('🟦 [RegisterContainer] - formData COMPLET:', JSON.stringify(formData, null, 2))
+    console.log('🟦 [RegisterContainer] - Données préférences reçues:', JSON.stringify(data, null, 2))
+    console.log('🟦 [RegisterContainer] ================================')
+    
     setIsLoading(true)
     
     try {
+      console.log('🟦 [RegisterContainer] Début de la soumission des préférences')
+      console.log('🟦 [RegisterContainer] FormData actuel:', formData)
+      console.log('🟦 [RegisterContainer] Données de préférences:', data)
+      
       const finalData = { ...formData, preferences: data }
+      
+      // Validation des données avant envoi
+      if (!finalData.userId) {
+        throw new Error("ID utilisateur manquant. Veuillez recommencer l'inscription.")
+      }
+
+      if (!selectedRole) {
+        throw new Error("Rôle utilisateur non sélectionné. Veuillez recommencer l'inscription.")
+      }
+
+      // ✅ CORRECTION : Construction des données d'onboarding avec valeurs par défaut et schedule
       const onboardingData = {
-        userId: finalData.userId!,
-        role: selectedRole!,
+        userId: finalData.userId,
+        role: selectedRole,
+        // Garantir que personalInfo existe toujours
         personalInfo: finalData.personalInfo || {},
-        activity: finalData.activity,
-        bio: finalData.bio,
-        services: finalData.services,
-        preferences: finalData.preferences
+        // Pour les professionnels, s'assurer que les données métier sont présentes
+        ...(selectedRole === UserRole.PROFESSIONAL && {
+          activity: finalData.activity || {
+            type: "AUTRE",
+            experience: 0
+          },
+          bio: finalData.bio || {
+            bio: "",
+            approach: ""
+          },
+          services: finalData.services || { services: [] },
+          schedule: finalData.schedule || undefined // ✅ FIX : schedule maintenant inclus
+        }),
+        // Préférences avec valeurs par défaut robustes
+        preferences: {
+          notifications: {
+            email: {
+              bookingConfirmation: data.notifications?.email?.bookingConfirmation ?? true,
+              bookingReminder: data.notifications?.email?.bookingReminder ?? true,
+              bookingCancellation: data.notifications?.email?.bookingCancellation ?? true,
+              newsletter: data.notifications?.email?.newsletter ?? false,
+              promotions: data.notifications?.email?.promotions ?? false,
+            },
+            sms: {
+              bookingConfirmation: data.notifications?.sms?.bookingConfirmation ?? false,
+              bookingReminder: data.notifications?.sms?.bookingReminder ?? false,
+              bookingCancellation: data.notifications?.sms?.bookingCancellation ?? false,
+            }
+          },
+          privacy: data.privacy || {
+            showProfile: true,
+            showAvailability: true
+          }
+        }
+      }
+
+      console.log('🟦 [RegisterContainer] Données d\'onboarding préparées:', onboardingData)
+
+      // Validation finale avant envoi
+      if (selectedRole === UserRole.PROFESSIONAL) {
+        // Vérifier que les données essentielles pour un professionnel sont présentes
+        if (!onboardingData.activity) {
+          console.warn('🟨 [RegisterContainer] Activité manquante pour professionnel, utilisation de valeurs par défaut')
+        }
+        if (!onboardingData.bio) {
+          console.warn('🟨 [RegisterContainer] Bio manquante pour professionnel, utilisation de valeurs par défaut')
+        }
       }
 
       const result = await completeOnboarding(onboardingData)
       
       if (result.success) {
-        clearSavedData() // Nettoyer les données après succès
         toast.success("Profil créé avec succès !")
         
-        // Si professionnel avec plan, rediriger vers paiement
+        // ✅ CORRECTION : Ne PAS nettoyer les données si on va vers paiement
+        // Si professionnel avec plan, rediriger vers paiement SANS nettoyer
         if (selectedRole === UserRole.PROFESSIONAL && selectedPlan) {
           // Sauvegarder le plan pour le paiement
           localStorage.setItem('serenibook_selected_plan', selectedPlan)
           localStorage.setItem('serenibook_subscription_flow', 'true')
+          console.log('🟦 [RegisterContainer] Redirection vers finalisation abonnement SANS nettoyer localStorage')
           router.push('/finaliser-abonnement')
         } else {
-          // Redirection normale
+          // Redirection normale - on peut nettoyer
+          clearSavedData() 
+          console.log('🟦 [RegisterContainer] Redirection vers tableau de bord')
           router.push("/tableau-de-bord")
         }
+      } else {
+        throw new Error(result.error || "Erreur lors de la finalisation")
       }
     } catch (error) {
-      console.error(error)
-      toast.error("Une erreur est survenue lors de la finalisation")
+      console.error('🔴 [RegisterContainer] Erreur lors de la finalisation:', error)
+      
+      // Messages d'erreur plus informatifs
+      if (error instanceof Error) {
+        if (error.message.includes("validation") || error.message.includes("invalides")) {
+          toast.error("Veuillez vérifier que tous les champs obligatoires sont remplis correctement.")
+        } else if (error.message.includes("utilisateur")) {
+          toast.error("Problème avec votre compte. Veuillez recommencer l'inscription.")
+        } else {
+          toast.error(error.message)
+        }
+      } else {
+        toast.error("Une erreur inattendue s'est produite. Veuillez réessayer.")
+      }
     } finally {
       setIsLoading(false)
     }

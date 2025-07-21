@@ -105,6 +105,7 @@ export default function FinalizerAbonnementPage() {
     setSelectedPlan(savedPlan)
   }, [session, status, router])
 
+  // ✅ CORRECTION : Ne pas nettoyer localStorage pendant le paiement
   const handleStartSubscription = async () => {
     if (!selectedPlan || !session?.user?.id) {
       toast.error("Erreur lors de la configuration de l'abonnement")
@@ -131,9 +132,10 @@ export default function FinalizerAbonnementPage() {
         throw new Error(data.error || 'Erreur lors de la création de la session de paiement')
       }
 
-      // Nettoyer localStorage avant redirection
-      localStorage.removeItem('serenibook_selected_plan')
-      localStorage.removeItem('serenibook_subscription_flow')
+      // ✅ CORRECTION : Ne PAS nettoyer localStorage ici
+      // Le nettoyage se fera dans la page inscription-reussie
+      // localStorage.removeItem('serenibook_selected_plan')
+      // localStorage.removeItem('serenibook_subscription_flow')
 
       // Rediriger vers Stripe Checkout
       if (data.url) {
@@ -147,10 +149,16 @@ export default function FinalizerAbonnementPage() {
     }
   }
 
+  // ✅ CORRECTION : Nettoyer localStorage seulement si on skip
   const handleSkipForNow = () => {
     // Nettoyer localStorage
     localStorage.removeItem('serenibook_selected_plan')
     localStorage.removeItem('serenibook_subscription_flow')
+    
+    // ✅ AJOUT : Nettoyer aussi les données d'onboarding
+    localStorage.removeItem('serenibook_onboarding_data')
+    localStorage.removeItem('serenibook_onboarding_step')
+    localStorage.removeItem('serenibook_onboarding_role')
     
     toast.success("Vous pourrez configurer votre abonnement plus tard depuis les paramètres.")
     router.push('/tableau-de-bord?welcome=true')

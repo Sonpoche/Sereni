@@ -15,7 +15,7 @@ const serviceSchema = z.object({
   location: z.string().optional(),
 })
 
-// NOUVEAU : Schéma pour les horaires
+// Schéma pour les horaires
 const scheduleSchema = z.object({
   workingDays: z.array(z.number().min(0).max(6)),
   startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format d'heure invalide"),
@@ -23,7 +23,7 @@ const scheduleSchema = z.object({
   isFullWeek: z.boolean().optional(),
 })
 
-// Schéma de validation pour les données d'onboarding
+// ✅ Schéma de validation compatible avec le modèle Prisma
 const onboardingSchema = z.object({
   userId: z.string(),
   role: z.nativeEnum(UserRole),
@@ -33,7 +33,7 @@ const onboardingSchema = z.object({
     address: z.string().optional(),
     city: z.string().optional(),
     postalCode: z.string().optional(),
-  }),
+  }).optional().default({}),
   activity: z.object({
     type: z.string(),
     otherTypeDetails: z.string().optional(),
@@ -43,7 +43,7 @@ const onboardingSchema = z.object({
     bio: z.string(),
     approach: z.string(),
   }).optional(),
-  schedule: scheduleSchema.optional(), // NOUVEAU : Schéma horaires
+  schedule: scheduleSchema.optional(),
   services: z.object({
     services: z.array(serviceSchema),
   }).optional(),
@@ -69,7 +69,7 @@ const onboardingSchema = z.object({
   }),
 })
 
-// Fonction de mappage des types professionnels - Frontend vers Prisma
+// Fonction de mappage des types professionnels
 const mapToProfessionalType = (type: string): ProfessionalType => {
   const mapping: Record<string, ProfessionalType> = {
     // Types exacts de Prisma
@@ -118,7 +118,31 @@ export async function POST(request: Request) {
     const body = await request.json()
     console.log('🟦 [API] Données reçues:', JSON.stringify(body, null, 2))
 
-    const data = onboardingSchema.parse(body)
+    // ✅ Validation avec gestion d'erreurs détaillée
+    let data;
+    try {
+      data = onboardingSchema.parse(body)
+    } catch (validationError) {
+      console.log('🔴 [API] Erreur de validation détaillée:', validationError)
+      if (validationError instanceof z.ZodError) {
+        console.log('🔴 [API] Détail des erreurs de validation:')
+        validationError.errors.forEach((error, index) => {
+          console.log(`🔴 [API] Erreur ${index + 1}:`, {
+            path: error.path.join('.'),
+            message: error.message,
+            code: error.code
+          })
+        })
+        
+        return NextResponse.json({ 
+          success: false,
+          error: "Données de validation invalides",
+          details: validationError.errors,
+          receivedData: body
+        }, { status: 400 })
+      }
+      throw validationError
+    }
 
     // Vérification que l'utilisateur existe
     const userBefore = await prisma.user.findUnique({
@@ -152,60 +176,84 @@ export async function POST(request: Request) {
           })
         }
 
-        console.log('🟦 [API] Création du profil professionnel avec services...')
+        console.log('🟦 [API] Création du profil professionnel...')
 
-        // Création du profil dans une transaction
+        // ✅ Gestion robuste des données optionnelles
+        const personalInfo = data.personalInfo || {}
+        const activity = data.activity
+        const bio = data.bio
+        const services = data.services?.services || []
+        const schedule = data.schedule
+
+        // Créer le profil professionnel avec transaction
         const result = await prisma.$transaction(async (tx) => {
-          // Créer d'abord le profil professionnel
+          // ✅ Création du professionnel compatible avec le schéma Prisma
           const professional = await tx.professional.create({
             data: {
               userId: userBefore.id,
-              type: mapToProfessionalType(data.activity?.type || "OTHER"),
-              otherTypeDetails: data.activity?.otherTypeDetails,
-              yearsExperience: data.activity?.experience || 0,
-              phone: data.personalInfo.phone,
-              address: data.personalInfo.address,
-              city: data.personalInfo.city,
-              postalCode: data.personalInfo.postalCode,
-              bio: data.bio?.bio,
-              description: data.bio?.approach,
+              type: activity ? mapToProfessionalType(activity.type) : "OTHER",
+              otherTypeDetails: activity?.otherTypeDetails || null,
+              yearsExperience: activity?.experience || 0,
+              bio: bio?.bio || "",
+              description: bio?.approach || "",
+              phone: personalInfo.phone || null,
+              address: personalInfo.address || null,
+              city: personalInfo.city || null,
+              postalCode: personalInfo.postalCode || null,
               autoConfirmBookings: false,
+              // Champs avec valeurs par défaut du schéma
+              specialties: [],
+              certifications: [],
               languages: ["fr"],
-              notifications: {
-                create: {
-                  emailEnabled: data.preferences.notifications.email.bookingConfirmation,
-                  smsEnabled: data.preferences.notifications.sms.bookingConfirmation,
-                }
-              }
-            },
+              country: "FR",
+              subscriptionTier: "standard",
+              allowedBookingWindow: 30,
+              cancelationWindow: 24,
+              bufferTime: 0,
+            }
           })
 
-          console.log('🟦 [API] Profil professionnel créé, ID:', professional.id)
+          console.log('🟦 [API] Profil professionnel créé:', professional.id)
 
-          // NOUVEAU : Créer les horaires si fournis
-          if (data.schedule && data.schedule.workingDays.length > 0) {
-            console.log('🟦 [API] Création des horaires:', data.schedule)
+          // ✅ Créer les paramètres de notification
+          await tx.notificationSettings.create({
+            data: {
+              professionalId: professional.id,
+              emailEnabled: data.preferences.notifications.email.bookingConfirmation,
+              smsEnabled: data.preferences.notifications.sms.bookingConfirmation,
+              cancelationNotifications: data.preferences.notifications.email.bookingCancellation,
+              newBookingNotifications: data.preferences.notifications.email.bookingConfirmation,
+              reminderNotifications: data.preferences.notifications.email.bookingReminder,
+              reminderHours: 24,
+            }
+          })
 
-            const availabilityPromises = data.schedule.workingDays.map(dayOfWeek => 
-              tx.availability.create({
+          console.log('🟦 [API] Paramètres de notification créés')
+
+          // Créer les créneaux de disponibilité si les horaires sont fournis
+          if (schedule && schedule.workingDays.length > 0) {
+            console.log('🟦 [API] Création des créneaux de disponibilité...')
+            
+            const availabilityPromises = schedule.workingDays.map(async (dayOfWeek) => {
+              return tx.availability.create({
                 data: {
                   professionalId: professional.id,
-                  dayOfWeek: dayOfWeek,
-                  startTime: data.schedule!.startTime,
-                  endTime: data.schedule!.endTime,
+                  dayOfWeek,
+                  startTime: schedule.startTime,
+                  endTime: schedule.endTime,
                 }
               })
-            )
+            })
 
             const createdAvailabilities = await Promise.all(availabilityPromises)
-            console.log('✅ [API] Créneaux horaires créés:', createdAvailabilities.length)
+            console.log('🟦 [API] Créneaux créés:', createdAvailabilities.length)
           }
 
           // Créer les services si fournis
-          if (data.services?.services && data.services.services.length > 0) {
-            console.log('🟦 [API] Création de', data.services.services.length, 'service(s)...')
+          if (services.length > 0) {
+            console.log('🟦 [API] Création de', services.length, 'service(s)...')
             
-            const servicePromises = data.services.services.map(async (serviceData, index) => {
+            const servicePromises = services.map(async (serviceData, index) => {
               console.log(`🟦 [API] Création du service ${index + 1}:`, serviceData.name)
               
               return tx.service.create({
@@ -225,7 +273,6 @@ export async function POST(request: Request) {
             const createdServices = await Promise.all(servicePromises)
             console.log('🟦 [API] Services créés:', createdServices.length)
             
-            // Retourner le professionnel avec ses services
             return {
               professional,
               services: createdServices
@@ -239,10 +286,10 @@ export async function POST(request: Request) {
         await prisma.$executeRaw`UPDATE "User" SET "hasProfile" = true WHERE id = ${userBefore.id}`
 
         // Mettre à jour le nom si fourni
-        if (data.personalInfo.name) {
+        if (personalInfo.name) {
           await prisma.user.update({
             where: { id: userBefore.id },
-            data: { name: data.personalInfo.name }
+            data: { name: personalInfo.name }
           })
         }
 
@@ -282,13 +329,17 @@ export async function POST(request: Request) {
 
         console.log('🟦 [API] Création du profil client...')
 
+        const personalInfo = data.personalInfo || {}
+
         const clientProfile = await prisma.client.create({
           data: {
             userId: userBefore.id,
-            phone: data.personalInfo.phone,
-            address: data.personalInfo.address,
-            city: data.personalInfo.city,
-            postalCode: data.personalInfo.postalCode,
+            phone: personalInfo.phone || null,
+            address: personalInfo.address || null,
+            city: personalInfo.city || null,
+            postalCode: personalInfo.postalCode || null,
+            country: "FR",
+            preferredLanguage: "fr",
           },
         })
 
@@ -296,10 +347,10 @@ export async function POST(request: Request) {
         await prisma.$executeRaw`UPDATE "User" SET "hasProfile" = true WHERE id = ${userBefore.id}`
 
         // Mettre à jour le nom si fourni
-        if (data.personalInfo.name) {
+        if (personalInfo.name) {
           await prisma.user.update({
             where: { id: userBefore.id },
-            data: { name: data.personalInfo.name }
+            data: { name: personalInfo.name }
           })
         }
 
@@ -329,10 +380,10 @@ export async function POST(request: Request) {
     console.error('🔴 [API] Erreur générale:', error)
     
     if (error instanceof z.ZodError) {
-      console.log('🔴 [API] Erreur de validation:', error.errors)
+      console.log('🔴 [API] Erreur de validation finale:', error.errors)
       return NextResponse.json({ 
         success: false,
-        error: "Données invalides",
+        error: "Données invalides - validation finale",
         details: error.errors
       }, { status: 400 })
     }

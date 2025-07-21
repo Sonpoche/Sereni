@@ -29,9 +29,19 @@ export default function InscriptionReussiePage() {
   const sessionId = searchParams.get('session_id')
 
   useEffect(() => {
-    // Animation de confettis simulée (tu peux ajouter une vraie lib si besoin)
+    // ✅ NETTOYER toutes les données d'onboarding après succès
+    console.log('🟦 [InscriptionReussie] Nettoyage des données après succès')
+    
+    localStorage.removeItem('serenibook_selected_plan')
+    localStorage.removeItem('serenibook_subscription_flow')
+    localStorage.removeItem('serenibook_onboarding_data')
+    localStorage.removeItem('serenibook_onboarding_step')
+    localStorage.removeItem('serenibook_onboarding_role')
+    
+    console.log('🟦 [InscriptionReussie] Données nettoyées avec succès')
+
+    // Animation de confettis simulée
     const timer = setTimeout(() => {
-      // Animation simple avec du CSS au lieu de confetti
       console.log('🎉 Inscription réussie!')
     }, 500)
 
