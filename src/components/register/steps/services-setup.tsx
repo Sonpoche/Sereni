@@ -175,7 +175,7 @@ export default function ServicesSetup({
       {/* Information complémentaire avec couleurs lavande */}
       <ConseilBox 
         icon={<Lightbulb className="h-5 w-5" />}
-        title="Services individuels vs cours collectifs"
+        title="Services individuels"
       >
         <p className="mb-3">
           Les services que vous créez ici sont pour des <strong>rendez-vous individuels</strong> avec vos clients.

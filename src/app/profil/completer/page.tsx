@@ -280,8 +280,8 @@ export default function CompleteProfilePage() {
         personalInfo: formData.personalInfo,
         activity: formData.activity,
         bio: formData.bio,
-        services: formData.services, // Nouvelles données de services
-        schedule: formData.schedule, // Nouvelles données de planning
+        services: formData.services,
+        schedule: formData.schedule,
         preferences: data
       }
 
@@ -306,23 +306,29 @@ export default function CompleteProfilePage() {
         clearSavedData() // Nettoyer les données après succès
         toast.success("Profil complété avec succès !")
         
-        // Forcer la mise à jour de la session
-        try {
-          // Déclencher une mise à jour de la session
-          await fetch("/api/auth/session", {
-            method: "GET",
-            headers: {
-              "Cache-Control": "no-cache"
-            }
-          })
-          
-          // Attendre et rediriger avec un hard refresh
-          setTimeout(() => {
+        // ✅ NOUVEAU: Vérifier si c'est un professionnel avec un plan sélectionné
+        const selectedPlan = localStorage.getItem('serenibook_selected_plan')
+        const isSubscriptionFlow = localStorage.getItem('serenibook_subscription_flow')
+        
+        if (session.user.role === 'PROFESSIONAL' && selectedPlan && isSubscriptionFlow) {
+          // Rediriger vers la finalisation de l'abonnement
+          router.push('/finaliser-abonnement')
+        } else {
+          // Forcer la mise à jour de la session et rediriger
+          try {
+            await fetch("/api/auth/session", {
+              method: "GET",
+              headers: {
+                "Cache-Control": "no-cache"
+              }
+            })
+            
+            setTimeout(() => {
+              window.location.href = "/tableau-de-bord"
+            }, 1000)
+          } catch (error) {
             window.location.href = "/tableau-de-bord"
-          }, 1000)
-        } catch (error) {
-          // Fallback : redirection directe
-          window.location.href = "/tableau-de-bord"
+          }
         }
       } else {
         throw new Error(result.error || "Erreur lors de la création du profil")

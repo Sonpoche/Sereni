@@ -1,4 +1,4 @@
-// src/app/(public)/register/page.tsx
+// src/app/(public)/inscription/page.tsx
 "use client"
 
 import { useState } from "react"
@@ -12,8 +12,12 @@ export default function RegisterPage() {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null)
 
   const handleContinue = () => {
-    if (selectedRole) {
+    if (selectedRole === UserRole.CLIENT) {
+      // Les clients vont directement à l'onboarding
       router.push(`/onboarding?role=${selectedRole}&flow=email`)
+    } else if (selectedRole === UserRole.PROFESSIONAL) {
+      // NOUVEAU: Les professionnels choisissent d'abord leur abonnement
+      router.push('/choix-abonnement')
     }
   }
 

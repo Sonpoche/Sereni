@@ -3,7 +3,8 @@
 
 import { useState, useEffect } from "react"
 import { UserRole } from "@prisma/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react" // ✅ AJOUTÉ
 import Link from "next/link"
 import { toast } from "sonner"
 import { User, Users, ArrowLeft, Check, Clock, Users2, Calendar, Zap, Shield, Sparkles } from "lucide-react"
@@ -75,6 +76,8 @@ export default function RegisterContainer({
   initialStep = 1,
   initialRole
 }: RegisterContainerProps) {
+  const { data: session, status } = useSession() // ✅ AJOUTÉ
+  const searchParams = useSearchParams()
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(initialRole || null)
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [formData, setFormData] = useState<FormData>({})
@@ -84,22 +87,49 @@ export default function RegisterContainer({
   const router = useRouter()
   const { register, completeOnboarding } = useAuth()
 
-  // Restaurer les données depuis le localStorage au montage
+  // Récupérer le plan depuis l'URL
+  const selectedPlan = searchParams.get('plan') as 'standard' | 'premium' | null
+
+  // ✅ MODIFIÉ: Restaurer les données avec vérification de session
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        // Restaurer les données du formulaire
+        // Vérifier d'abord si l'utilisateur est connecté
         const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
-        if (savedFormData) {
+        const savedUserId = savedFormData ? JSON.parse(savedFormData).userId : null
+        
+        // Si on a un userId sauvegardé mais qu'aucune session n'est active, nettoyer
+        if (savedUserId && status === "unauthenticated") {
+          console.log("🧹 Nettoyage - utilisateur déconnecté")
+          clearSavedData()
+          setHasRestoredData(true)
+          return
+        }
+
+        // Si on est connecté mais que le userId sauvegardé ne correspond pas, nettoyer
+        if (savedUserId && status === "authenticated" && session?.user?.id !== savedUserId) {
+          console.log("🧹 Nettoyage - utilisateur différent")
+          clearSavedData()
+          setHasRestoredData(true)
+          return
+        }
+
+        // Restaurer les données seulement si l'utilisateur est connecté ET correspond
+        if (savedFormData && (status === "authenticated" || status === "loading")) {
           const parsedData = JSON.parse(savedFormData)
           setFormData(parsedData)
         }
 
-        // Restaurer l'étape courante (si pas de props initialStep)
-        if (initialStep === 1) {
+        // ✅ CORRECTION: Restaurer l'étape seulement si on n'a pas d'initialStep ET si on n'est pas en train de créer un compte
+        if (initialStep === 1 && !isLoading) { // ✅ AJOUTÉ: !isLoading pour éviter l'interférence
           const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
-          if (savedStep) {
-            setCurrentStep(parseInt(savedStep))
+          // Restaurer l'étape seulement si on a un userId correspondant
+          if (savedStep && (status === "authenticated" || (savedUserId && status === "loading"))) {
+            const stepNumber = parseInt(savedStep)
+            // ✅ SÉCURITÉ: Ne pas revenir en arrière si on est déjà plus loin
+            if (stepNumber > currentStep) {
+              setCurrentStep(stepNumber)
+            }
           }
         }
 
@@ -115,18 +145,32 @@ export default function RegisterContainer({
 
         // Afficher un message si des données ont été restaurées
         const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
-        if (savedFormData || (savedStep && parseInt(savedStep) > 1)) {
+        if (savedFormData && status === "authenticated" && parseInt(savedStep || "1") > 1) {
           toast.success("Vos données ont été restaurées !", {
             description: "Vous pouvez continuer là où vous vous étiez arrêté."
           })
         }
       } catch (error) {
         console.error('Erreur lors de la restauration des données:', error)
-        // En cas d'erreur, nettoyer le localStorage
         clearSavedData()
+        setHasRestoredData(true)
       }
     }
-  }, [initialStep, initialRole])
+  }, [initialStep, initialRole, status, session, isLoading]) // ✅ AJOUTÉ: isLoading aux dépendances
+
+  // ✅ NOUVEAU: Nettoyer automatiquement si l'utilisateur se déconnecte
+  useEffect(() => {
+    if (status === "unauthenticated" && hasRestoredData) {
+      const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
+      if (savedFormData) {
+        console.log("🧹 Utilisateur déconnecté - nettoyage automatique")
+        clearSavedData()
+        setCurrentStep(1)
+        setSelectedRole(initialRole || null)
+        setFormData({})
+      }
+    }
+  }, [status, hasRestoredData, initialRole])
 
   // Sauvegarder les données à chaque changement
   useEffect(() => {
@@ -264,12 +308,15 @@ export default function RegisterContainer({
       setFormData(newFormData)
 
       if (selectedRole === UserRole.CLIENT) {
-        clearSavedData() // Nettoyer les données après succès
+        clearSavedData()
         toast.success("Inscription réussie !")
         router.push("/tableau-de-bord")
       } else {
-        setCurrentStep(2)
-        toast.success("Compte créé avec succès !")
+        // ✅ CORRECTION: Utiliser setTimeout pour s'assurer que le changement d'étape se fait après la mise à jour de session
+        toast.success("Compte créé avec succès ! Continuons votre configuration.")
+        setTimeout(() => {
+          setCurrentStep(2)
+        }, 100) // Petit délai pour éviter les conflits de state
       }
     } catch (error) {
       console.error(error)
@@ -299,6 +346,7 @@ export default function RegisterContainer({
     setCurrentStep(6)
   }
 
+  // Gestion du paiement après l'onboarding
   const handlePreferencesSubmit = async (data: PreferencesFormData) => {
     setIsLoading(true)
     
@@ -319,7 +367,17 @@ export default function RegisterContainer({
       if (result.success) {
         clearSavedData() // Nettoyer les données après succès
         toast.success("Profil créé avec succès !")
-        router.push("/tableau-de-bord")
+        
+        // Si professionnel avec plan, rediriger vers paiement
+        if (selectedRole === UserRole.PROFESSIONAL && selectedPlan) {
+          // Sauvegarder le plan pour le paiement
+          localStorage.setItem('serenibook_selected_plan', selectedPlan)
+          localStorage.setItem('serenibook_subscription_flow', 'true')
+          router.push('/finaliser-abonnement')
+        } else {
+          // Redirection normale
+          router.push("/tableau-de-bord")
+        }
       }
     } catch (error) {
       console.error(error)
@@ -543,6 +601,16 @@ export default function RegisterContainer({
                 <span>Environ {Math.ceil(estimatedTime)} min restantes</span>
               </div>
             </div>
+
+            {/* Indicateur de plan sélectionné */}
+            {selectedRole === UserRole.PROFESSIONAL && selectedPlan && (
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center px-4 py-2 rounded-full text-sm bg-primary/10 text-primary border border-primary/20">
+                  <Shield className="h-4 w-4 mr-2" />
+                  Plan sélectionné : {selectedPlan === 'standard' ? 'Standard (20€/mois)' : 'Premium (40€/mois)'}
+                </div>
+              </div>
+            )}
 
             {/* Titre contextuel */}
             <div className="text-center mb-16">
