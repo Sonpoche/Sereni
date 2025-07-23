@@ -29,14 +29,16 @@ export default function InscriptionReussiePage() {
   const sessionId = searchParams.get('session_id')
 
   useEffect(() => {
-    // ✅ NETTOYER toutes les données d'onboarding après succès
+    // 🔧 SIMPLIFICATION : Nettoyer seulement les données d'onboarding (plus simple)
     console.log('🟦 [InscriptionReussie] Nettoyage des données après succès')
     
-    localStorage.removeItem('serenibook_selected_plan')
-    localStorage.removeItem('serenibook_subscription_flow')
+    // Nettoyer toutes les données d'onboarding
     localStorage.removeItem('serenibook_onboarding_data')
     localStorage.removeItem('serenibook_onboarding_step')
     localStorage.removeItem('serenibook_onboarding_role')
+    
+    // 🔧 NOUVEAU : Nettoyer aussi les données de sélection de plan (plus nécessaire)
+    localStorage.removeItem('serenibook_selected_plan_from_url')
     
     console.log('🟦 [InscriptionReussie] Données nettoyées avec succès')
 
@@ -121,15 +123,20 @@ export default function InscriptionReussiePage() {
                 <p className="text-2xl text-gray-700 mb-4">
                   Votre espace professionnel est prêt !
                 </p>
+                {/* 🔧 MODIFICATION : Message adapté selon le statut d'abonnement */}
                 {subscriptionData?.subscription ? (
                   <p className="text-xl text-gray-600">
                     Votre abonnement <strong className="text-primary">
                       {subscriptionData.subscription.plan}
                     </strong> est maintenant actif
                   </p>
+                ) : fromStripe ? (
+                  <p className="text-xl text-gray-600">
+                    Votre abonnement a été configuré avec succès et vous pouvez commencer à recevoir des clients
+                  </p>
                 ) : (
                   <p className="text-xl text-gray-600">
-                    Votre profil professionnel est configuré et vous pouvez commencer à recevoir des clients
+                    Votre profil professionnel est configuré. Vous pouvez maintenant configurer votre abonnement ou commencer sans.
                   </p>
                 )}
               </>
@@ -207,8 +214,8 @@ export default function InscriptionReussiePage() {
             )}
           </div>
 
-          {/* Cadeau de bienvenue pour les professionnels */}
-          {isProfessional && (
+          {/* 🔧 MODIFICATION : Cadeau de bienvenue conditionnel */}
+          {isProfessional && (subscriptionData?.subscription || fromStripe) && (
             <Card className="border-primary bg-gradient-to-r from-primary/5 to-primary/10 mb-8">
               <CardContent className="p-8 text-center">
                 <Gift className="h-12 w-12 text-primary mx-auto mb-4" />
@@ -260,13 +267,24 @@ export default function InscriptionReussiePage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-sm mr-4">1</div>
-                    <div>
-                      <h4 className="font-semibold">Configurez vos services</h4>
-                      <p className="text-sm text-gray-600">Définissez vos prestations et tarifs</p>
+                  {/* 🔧 MODIFICATION : Première étape conditionnelle */}
+                  {!subscriptionData?.subscription && !fromStripe ? (
+                    <div className="flex items-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+                      <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm mr-4">!</div>
+                      <div>
+                        <h4 className="font-semibold text-orange-800">Configurez votre abonnement</h4>
+                        <p className="text-sm text-orange-700">Pour recevoir des clients, vous devez activer un plan d'abonnement</p>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-center p-4 bg-gray-50 rounded-lg">
+                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-sm mr-4">1</div>
+                      <div>
+                        <h4 className="font-semibold">Configurez vos services</h4>
+                        <p className="text-sm text-gray-600">Définissez vos prestations et tarifs</p>
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="flex items-center p-4 bg-gray-50 rounded-lg">
                     <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-sm mr-4">2</div>

@@ -15,8 +15,8 @@ const publicPaths = [
   "/cours-collectifs",
   "/recherche",
   "/tarifs",
-  "/finaliser-abonnement", // ✅ AJOUT: Autoriser l'accès à la page de checkout
-  "/inscription-reussie"    // ✅ AJOUT: Autoriser l'accès à la page de confirmation
+  "/choix-abonnement",      // ✅ AJOUT: Page de choix d'abonnement
+  "/inscription-reussie"    // ✅ GARDE: Page de confirmation après Stripe
 ]
 
 // Pages qui requièrent une authentification
@@ -35,14 +35,12 @@ const protectedPaths = [
 const allowedIncompleteProfilePaths = [
   "/profil/completer",
   "/api/",
-  "/finaliser-abonnement", // ✅ AJOUT: Permettre l'accès même avec profil complet
-  "/inscription-reussie"   // ✅ AJOUT: Permettre l'accès même avec profil complet
+  "/inscription-reussie"   // ✅ GARDE: Permettre l'accès même avec profil incomplet
 ]
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   
-  // AJOUT DE LOGS pour debug
   console.log(`🔄 [Middleware] Chemin: ${pathname}`)
 
   // Vérifier si le chemin actuel est public - FIX: comparaison exacte pour "/"
@@ -66,7 +64,6 @@ export async function middleware(request: NextRequest) {
   // Obtenir la session
   const session = await auth()
 
-  // AJOUT DE LOGS pour debug
   if (session) {
     console.log(`🔄 [Middleware] Utilisateur: ${session.user.email}, hasProfile: ${session.user.hasProfile}`)
   }
@@ -88,20 +85,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // ✅ NOUVELLE LOGIQUE: Protection spéciale pour le flow d'abonnement
-  if (pathname === "/finaliser-abonnement" || pathname === "/inscription-reussie") {
+  // ✅ GARDE: Protection spéciale pour inscription-reussie (retour de Stripe)
+  if (pathname === "/inscription-reussie") {
     if (!session) {
-      console.log(`🔄 [Middleware] Redirection vers connexion - flow abonnement non connecté`)
+      console.log(`🔄 [Middleware] Redirection vers connexion - page succès non connecté`)
       return NextResponse.redirect(new URL("/connexion", request.url))
     }
 
-    // Vérifier que c'est un professionnel
-    if (session.user.role !== "PROFESSIONAL") {
-      console.log(`🔄 [Middleware] Redirection vers tableau-de-bord - flow abonnement client`)
-      return NextResponse.redirect(new URL("/tableau-de-bord", request.url))
-    }
-
-    console.log(`🔄 [Middleware] Accès autorisé au flow d'abonnement: ${pathname}`)
+    console.log(`🔄 [Middleware] Accès autorisé à inscription-reussie`)
     return NextResponse.next()
   }
 
@@ -113,8 +104,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/profil/completer", request.url))
     }
     
-    // ✅ CORRECTION: Vérifier d'abord si on est dans un flow d'abonnement
-    // On peut être sur /inscription mais venir de Stripe avec un flow d'abonnement
+    // ✅ MODIFICATION: Vérifier d'abord si on est dans un flow de retour Stripe
     const isInSubscriptionFlow = request.nextUrl.searchParams.get('success') === 'true' || 
                                 request.nextUrl.searchParams.get('session_id')
     

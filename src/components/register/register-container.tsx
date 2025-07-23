@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { User, Users, ArrowLeft, Check, Clock, Users2, Calendar, Zap, Shield, Sparkles } from "lucide-react"
+import { User, Users, ArrowLeft, Check, Clock, Users2, Calendar, Zap, Shield, Sparkles, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import AccountForm from "./steps/account-form"
@@ -16,10 +16,11 @@ import ActivityForm from "./steps/activity-form"
 import BioForm from "./steps/bio-form"
 import PreferencesForm from "./steps/preferences-form"
 import ServicesSetup from "./steps/services-setup"
+import SubscriptionStep from "./steps/subscription-step" // NOUVEAU
 import type { PreferencesFormData } from "./steps/preferences-form"
 import { cn } from "@/lib/utils"
 
-// Interface FormData corrigée avec schedule
+// Interface FormData mise à jour
 interface FormData {
   account?: {
     email: string;
@@ -57,7 +58,6 @@ interface FormData {
       location?: string;
     }>;
   };
-  // AJOUT : Interface schedule manquante
   schedule?: {
     workingDays: number[];
     startTime: string;
@@ -97,15 +97,12 @@ export default function RegisterContainer({
   const [isLoading, setIsLoading] = useState(false)
   const [estimatedTime, setEstimatedTime] = useState(0)
   const [hasRestoredData, setHasRestoredData] = useState(false)
-  const [userIdFixed, setUserIdFixed] = useState(false) // AJOUT : Protection contre boucle infinie
-  const isInitialized = useRef(false) // AJOUT: Éviter les multiples initialisations
+  const [userIdFixed, setUserIdFixed] = useState(false)
+  const isInitialized = useRef(false)
   const router = useRouter()
   const { register, completeOnboarding } = useAuth()
 
-  // Récupérer le plan depuis l'URL
-  const selectedPlan = searchParams.get('plan') as 'standard' | 'premium' | null
-
-  // 🔧 CORRECTION PRINCIPALE : useEffect séparé et amélioré
+  // 🔧 MODIFICATION : useEffect de restauration des données (identique)
   useEffect(() => {
     console.log('🔄 [RegisterContainer] useEffect déclenché avec:', {
       status,
@@ -116,27 +113,15 @@ export default function RegisterContainer({
       isInitialized: isInitialized.current
     })
     
-    // Éviter les multiples initialisations
     if (typeof window !== 'undefined' && !isInitialized.current) {
       isInitialized.current = true;
 
       try {
-        console.log('🟦 [RegisterContainer] ================================')
         console.log('🟦 [RegisterContainer] DÉBUT useEffect restauration')
-        console.log('🟦 [RegisterContainer] ================================')
-        console.log('🟦 [RegisterContainer] status:', status)
-        console.log('🟦 [RegisterContainer] session:', session)
-        console.log('🟦 [RegisterContainer] initialStep:', initialStep)
-        console.log('🟦 [RegisterContainer] initialRole:', initialRole)
         
-        // Vérifier d'abord si l'utilisateur est connecté
         const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
         const savedUserId = savedFormData ? JSON.parse(savedFormData).userId : null
         
-        console.log('🟦 [RegisterContainer] savedFormData:', savedFormData)
-        console.log('🟦 [RegisterContainer] savedUserId:', savedUserId)
-        
-        // Si on a un userId sauvegardé mais qu'aucune session n'est active, nettoyer
         if (savedUserId && status === "unauthenticated") {
           console.log("🧹 Utilisateur déconnecté - nettoyage automatique")
           clearSavedData()
@@ -144,7 +129,6 @@ export default function RegisterContainer({
           return
         }
 
-        // Si on est connecté mais que le userId sauvegardé ne correspond pas, nettoyer
         if (savedUserId && status === "authenticated" && session?.user?.id !== savedUserId) {
           console.log("🧹 Utilisateur différent - nettoyage")
           clearSavedData()
@@ -152,20 +136,16 @@ export default function RegisterContainer({
           return
         }
 
-        // Restaurer les données seulement si l'utilisateur est connecté ET correspond
         if (savedFormData && (status === "authenticated" || status === "loading")) {
           const parsedData = JSON.parse(savedFormData)
           console.log('🟦 [RegisterContainer] Restauration données localStorage:', parsedData)
           setFormData(parsedData)
         }
 
-        // Restaurer l'étape seulement si on n'a pas d'initialStep ET si on n'est pas en train de créer un compte
         if (initialStep === 1 && !isLoading) {
           const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
-          // Restaurer l'étape seulement si on a un userId correspondant
           if (savedStep && (status === "authenticated" || (savedUserId && status === "loading"))) {
             const stepNumber = parseInt(savedStep)
-            // Ne pas revenir en arrière si on est déjà plus loin
             if (stepNumber > currentStep) {
               console.log('🟦 [RegisterContainer] Restauration étape:', stepNumber)
               setCurrentStep(stepNumber)
@@ -173,7 +153,6 @@ export default function RegisterContainer({
           }
         }
 
-        // Restaurer le rôle sélectionné (si pas de props initialRole)
         if (!initialRole) {
           const savedRole = localStorage.getItem(STORAGE_KEYS.SELECTED_ROLE)
           if (savedRole && Object.values(UserRole).includes(savedRole as UserRole)) {
@@ -184,7 +163,6 @@ export default function RegisterContainer({
 
         setHasRestoredData(true)
 
-        // Afficher un message si des données ont été restaurées
         const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
         if (savedFormData && status === "authenticated" && parseInt(savedStep || "1") > 1) {
           toast.success("Vos données ont été restaurées !", {
@@ -201,25 +179,19 @@ export default function RegisterContainer({
     }
   }, [initialStep, initialRole, status, session, isLoading])
 
-  // 🔧 NOUVEAU: useEffect séparé pour corriger le userId manquant
+  // useEffect pour corriger le userId manquant (identique)
   useEffect(() => {
-    // CORRECTION MAJEURE : Si l'utilisateur est connecté mais pas d'userId dans formData
     if (status === "authenticated" && session?.user?.id && hasRestoredData && !userIdFixed && !formData.userId) {
       console.log('🟨 [RegisterContainer] CORRECTION: Utilisateur connecté sans userId dans formData')
-      console.log('🟨 [RegisterContainer] Récupération userId depuis session:', session.user.id)
-      
-      // Mettre à jour le formData avec l'userId de la session
       setFormData(prev => ({
         ...prev,
         userId: session.user.id
       }))
-      
-      setUserIdFixed(true) // Marquer comme corrigé pour éviter la boucle
-      console.log('🟨 [RegisterContainer] ✅ FormData corrigé avec userId de session')
+      setUserIdFixed(true)
     }
   }, [status, session?.user?.id, hasRestoredData, userIdFixed, formData.userId])
 
-  // Nettoyer automatiquement si l'utilisateur se déconnecte
+  // Nettoyer automatiquement si l'utilisateur se déconnecte (identique)
   useEffect(() => {
     if (status === "unauthenticated" && hasRestoredData) {
       const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
@@ -235,29 +207,14 @@ export default function RegisterContainer({
     }
   }, [status, hasRestoredData, initialRole])
 
-  // Sauvegarder les données à chaque changement
+  // Sauvegarder les données à chaque changement (identique)
   useEffect(() => {
     if (hasRestoredData && userIdFixed && typeof window !== 'undefined') {
       try {
-        console.log('🟦 [RegisterContainer] 💾 Sauvegarde localStorage...')
-        console.log('🟦 [RegisterContainer] - formData à sauvegarder:', JSON.stringify(formData, null, 2))
-        console.log('🟦 [RegisterContainer] - formData.userId:', formData.userId)
-        console.log('🟦 [RegisterContainer] - currentStep:', currentStep)
-        console.log('🟦 [RegisterContainer] - selectedRole:', selectedRole)
-        
         localStorage.setItem(STORAGE_KEYS.FORM_DATA, JSON.stringify(formData))
         localStorage.setItem(STORAGE_KEYS.CURRENT_STEP, currentStep.toString())
         if (selectedRole) {
           localStorage.setItem(STORAGE_KEYS.SELECTED_ROLE, selectedRole)
-        }
-        
-        console.log('🟦 [RegisterContainer] ✅ Sauvegarde localStorage terminée')
-        
-        // Vérifier immédiatement que la sauvegarde a fonctionné
-        const savedData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
-        if (savedData) {
-          const parsed = JSON.parse(savedData)
-          console.log('🟦 [RegisterContainer] 🔍 Vérification sauvegarde - userId dans localStorage:', parsed.userId)
         }
       } catch (error) {
         console.error('🔴 [RegisterContainer] Erreur lors de la sauvegarde:', error)
@@ -284,7 +241,7 @@ export default function RegisterContainer({
     }
   }, [selectedRole, currentStep])
 
-  // Définition des étapes avec métadonnées UX
+  // 🔧 MODIFICATION PRINCIPALE : Définition des étapes avec métadonnées UX (ÉTAPE 7 AJOUTÉE)
   const getSteps = () => {
     if (selectedRole === UserRole.CLIENT) {
       return [
@@ -350,9 +307,17 @@ export default function RegisterContainer({
         { 
           id: 6, 
           title: "Préférences", 
-          description: "Finalisation", 
+          description: "Notifications", 
           icon: Zap,
           estimatedTime: "1 min"
+        },
+        // 🔧 NOUVEAU : Étape 7 - Abonnement
+        { 
+          id: 7, 
+          title: "Abonnement", 
+          description: "Choisir votre plan", 
+          icon: CreditCard,
+          estimatedTime: "2 min"
         }
       ]
     }
@@ -362,17 +327,13 @@ export default function RegisterContainer({
   const currentStepData = steps.find(step => step.id === currentStep)
   const progressPercentage = (currentStep / steps.length) * 100
 
-  // 🔧 CORRECTION: Handlers avec sauvegarde automatique améliorée
+  // Handlers pour les étapes (identiques jusqu'à étape 6)
   const handleAccountSubmit = async (data: AccountFormData) => {
     if (!selectedRole) return;
     
     setIsLoading(true)
     try {
-      console.log('🟦 [RegisterContainer] ================================')
-      console.log('🟦 [RegisterContainer] DÉBUT handleAccountSubmit')
-      console.log('🟦 [RegisterContainer] ================================')
       console.log('🟦 [RegisterContainer] Début création compte pour:', data.email)
-      console.log('🟦 [RegisterContainer] selectedRole:', selectedRole)
       
       const result = await register({
         email: data.email,
@@ -381,19 +342,11 @@ export default function RegisterContainer({
         role: selectedRole
       })
 
-      console.log('🟦 [RegisterContainer] ✅ Résultat inscription COMPLET:', JSON.stringify(result, null, 2))
-
-      // CORRECTION : Vérifier que nous avons bien l'userId
       if (!result?.user?.id) {
-        console.error('🔴 [RegisterContainer] ❌ Pas d\'userId dans la réponse!')
-        console.error('🔴 [RegisterContainer] Structure result:', result)
-        console.error('🔴 [RegisterContainer] result.user:', result?.user)
         throw new Error("Erreur lors de la création du compte - ID utilisateur manquant dans la réponse")
       }
 
       const userId = result.user.id
-      console.log('🟦 [RegisterContainer] ✅ userId récupéré avec succès:', userId)
-
       const newFormData = {
         ...formData,
         account: {
@@ -403,20 +356,8 @@ export default function RegisterContainer({
         userId: userId
       }
       
-      console.log('🟦 [RegisterContainer] ✅ Nouveau FormData créé:')
-      console.log('🟦 [RegisterContainer] - userId:', newFormData.userId)
-      console.log('🟦 [RegisterContainer] - account:', newFormData.account)
-      console.log('🟦 [RegisterContainer] - FormData complet:', JSON.stringify(newFormData, null, 2))
-      
       setFormData(newFormData)
-      setUserIdFixed(true) // Marquer le userId comme fixé
-      console.log('🟦 [RegisterContainer] ✅ FormData mis à jour dans le state')
-
-      // Vérifier que le state a bien été mis à jour
-      setTimeout(() => {
-        console.log('🟦 [RegisterContainer] 🔍 Vérification formData après setState...')
-        console.log('🟦 [RegisterContainer] formData.userId après setState:', newFormData.userId)
-      }, 100)
+      setUserIdFixed(true)
 
       if (selectedRole === UserRole.CLIENT) {
         clearSavedData()
@@ -429,13 +370,8 @@ export default function RegisterContainer({
         }, 100)
       }
     } catch (error) {
-      console.error('🔴 [RegisterContainer] ================================')
-      console.error('🔴 [RegisterContainer] ERREUR dans handleAccountSubmit')
-      console.error('🔴 [RegisterContainer] ================================')
-      console.error('🔴 [RegisterContainer] Error object:', error)
       console.error('🔴 [RegisterContainer] Erreur lors de la création du compte:', error)
       
-      // Messages d'erreur plus spécifiques
       if (error instanceof Error) {
         if (error.message.includes("ID utilisateur manquant")) {
           toast.error("Erreur technique lors de la création du compte. Veuillez réessayer.")
@@ -472,37 +408,25 @@ export default function RegisterContainer({
     setCurrentStep(6)
   }
 
-  // 🔧 CORRECTION MAJEURE: Gestion du flow d'abonnement
+  // 🔧 MODIFICATION : Handler pour les préférences (étape 6) - Simplifié pour aller à l'étape 7
   const handlePreferencesSubmit = async (data: PreferencesFormData) => {
-    console.log('🟦 [RegisterContainer] ================================')
-    console.log('🟦 [RegisterContainer] 🚀 DÉBUT handlePreferencesSubmit')
-    console.log('🟦 [RegisterContainer] ================================')
-    console.log('🟦 [RegisterContainer] 📊 ÉTAT INITIAL:')
-    console.log('🟦 [RegisterContainer] - selectedRole:', selectedRole)
-    console.log('🟦 [RegisterContainer] - selectedPlan:', selectedPlan)
-    console.log('🟦 [RegisterContainer] - session?.user?.id:', session?.user?.id)
-    console.log('🟦 [RegisterContainer] - session status:', status)
-    console.log('🟦 [RegisterContainer] - userIdFixed:', userIdFixed)
-    console.log('🟦 [RegisterContainer] - hasRestoredData:', hasRestoredData)
-    console.log('🟦 [RegisterContainer] - formData.userId AVANT:', formData.userId)
-    console.log('🟦 [RegisterContainer] - formData COMPLET:', JSON.stringify(formData, null, 2))
-    console.log('🟦 [RegisterContainer] - Données préférences reçues:', JSON.stringify(data, null, 2))
-    console.log('🟦 [RegisterContainer] ================================')
-    
+    console.log('🟦 [RegisterContainer] Soumission préférences - passage à étape 7')
+    setFormData(prev => ({ ...prev, preferences: data }))
+    setCurrentStep(7) // ✅ Aller à l'étape abonnement
+  }
+
+  // 🔧 NOUVEAU : Handler pour l'abonnement (étape 7)
+  const handleSubscriptionSubmit = async (subscriptionData: { plan: 'standard' | 'premium' }) => {
     setIsLoading(true)
     
     try {
-      console.log('🟦 [RegisterContainer] Début de la soumission des préférences')
+      console.log('🟦 [RegisterContainer] 🚀 DÉBUT handleSubscriptionSubmit')
+      console.log('🟦 [RegisterContainer] Plan sélectionné:', subscriptionData.plan)
       
-      // 🔧 NOUVEAU: Déterminer le userId de manière robuste
+      // Déterminer le userId
       let userId = formData.userId;
-      
-      // Si pas d'userId dans formData, essayer de le récupérer depuis la session
       if (!userId && session?.user?.id) {
-        console.log("🔧 [RegisterContainer] Récupération userId depuis session");
         userId = session.user.id;
-        
-        // Mettre à jour le formData avec le userId
         setFormData(prev => ({ ...prev, userId }));
       }
 
@@ -510,94 +434,99 @@ export default function RegisterContainer({
         throw new Error("Impossible de déterminer l'ID utilisateur")
       }
 
-      console.log('🟦 [RegisterContainer] ✅ userId final déterminé:', userId)
-
-      const finalData = { ...formData, preferences: data, userId }
-      
-      // Validation des données avant envoi
-      if (!selectedRole) {
-        throw new Error("Rôle utilisateur non sélectionné. Veuillez recommencer l'inscription.")
-      }
-
-      // CORRECTION : Construction des données d'onboarding avec valeurs par défaut et schedule
+      // Construction des données d'onboarding COMPLÈTES
       const onboardingData = {
         userId: userId,
-        role: selectedRole,
-        // Garantir que personalInfo existe toujours
-        personalInfo: finalData.personalInfo || {},
-        // Pour les professionnels, s'assurer que les données métier sont présentes
+        role: selectedRole!,
+        personalInfo: formData.personalInfo || {},
         ...(selectedRole === UserRole.PROFESSIONAL && {
-          activity: finalData.activity || {
+          activity: formData.activity || {
             type: "AUTRE",
             experience: 0
           },
-          bio: finalData.bio || {
+          bio: formData.bio || {
             bio: "",
             approach: ""
           },
-          services: finalData.services || { services: [] },
-          schedule: finalData.schedule || undefined // FIX : schedule maintenant inclus
+          services: formData.services || { services: [] },
+          schedule: formData.schedule || undefined
         }),
-        // Préférences avec valeurs par défaut robustes
         preferences: {
           notifications: {
             email: {
-              bookingConfirmation: data.notifications?.email?.bookingConfirmation ?? true,
-              bookingReminder: data.notifications?.email?.bookingReminder ?? true,
-              bookingCancellation: data.notifications?.email?.bookingCancellation ?? true,
-              newsletter: data.notifications?.email?.newsletter ?? false,
-              promotions: data.notifications?.email?.promotions ?? false,
+              bookingConfirmation: formData.preferences?.notifications?.email?.bookingConfirmation ?? true,
+              bookingReminder: formData.preferences?.notifications?.email?.bookingReminder ?? true,
+              bookingCancellation: formData.preferences?.notifications?.email?.bookingCancellation ?? true,
+              newsletter: formData.preferences?.notifications?.email?.newsletter ?? false,
+              promotions: formData.preferences?.notifications?.email?.promotions ?? false,
             },
             sms: {
-              bookingConfirmation: data.notifications?.sms?.bookingConfirmation ?? false,
-              bookingReminder: data.notifications?.sms?.bookingReminder ?? false,
-              bookingCancellation: data.notifications?.sms?.bookingCancellation ?? false,
+              bookingConfirmation: formData.preferences?.notifications?.sms?.bookingConfirmation ?? false,
+              bookingReminder: formData.preferences?.notifications?.sms?.bookingReminder ?? false,
+              bookingCancellation: formData.preferences?.notifications?.sms?.bookingCancellation ?? false,
             }
           },
-          privacy: data.privacy || {
+          privacy: formData.preferences?.privacy || {
             showProfile: true,
             showAvailability: true
           }
         }
       }
 
-      console.log('🟦 [RegisterContainer] 📤 Envoi données onboarding:', onboardingData)
+      console.log('🟦 [RegisterContainer] 📤 Complétion onboarding AVANT paiement...')
 
+      // ÉTAPE 1 : Compléter l'onboarding AVANT de créer l'abonnement
       const result = await completeOnboarding(onboardingData)
       
       if (result.success) {
+        console.log('🟦 [RegisterContainer] ✅ Onboarding complété avec succès')
         toast.success("Profil créé avec succès !")
         
-        // 🔧 CORRECTION MAJEURE : Gérer le flow d'abonnement correctement
-        if (selectedRole === UserRole.PROFESSIONAL && selectedPlan) {
-          console.log('🟦 [RegisterContainer] 💳 Flow abonnement détecté')
-          console.log('🟦 [RegisterContainer] - Plan sélectionné:', selectedPlan)
-          console.log('🟦 [RegisterContainer] - Préparation redirection vers checkout')
-          
-          // ✅ NE PAS NETTOYER localStorage ici - on en a besoin pour la page de checkout
-          // Sauvegarder les infos pour le paiement (au cas où elles ne seraient pas déjà là)
-          localStorage.setItem('serenibook_selected_plan', selectedPlan)
-          localStorage.setItem('serenibook_subscription_flow', 'true')
-          
-          console.log('🟦 [RegisterContainer] ✅ Données sauvegardées dans localStorage pour checkout')
-          console.log('🟦 [RegisterContainer] 🔄 Redirection vers /finaliser-abonnement')
-          
-          // Rediriger vers la page de checkout
-          router.push('/finaliser-abonnement')
-        } else {
-          console.log('🟦 [RegisterContainer] 🏠 Pas d\'abonnement - redirection tableau de bord')
-          
-          // ✅ Seulement ici on peut nettoyer localStorage
-          clearSavedData() 
-          router.push("/tableau-de-bord")
+        // ÉTAPE 2 : Créer la session de checkout Stripe
+        console.log('🟦 [RegisterContainer] 💳 Création session checkout Stripe...')
+        const response = await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            plan: subscriptionData.plan,
+            returnUrl: `${window.location.origin}/inscription-reussie?success=true`
+          }),
+        })
+
+        const checkoutData = await response.json()
+
+        if (!response.ok) {
+          throw new Error(checkoutData.error || 'Erreur lors de la création de la session de paiement')
+        }
+
+        console.log('🟦 [RegisterContainer] ✅ Session checkout créée, nettoyage localStorage')
+
+        // ÉTAPE 3 : Nettoyer localStorage maintenant que tout est OK
+        clearSavedData()
+
+        // 🔧 CORRECTION : Marquer le composant comme "en cours de redirection" pour éviter les mises à jour
+        console.log('🟦 [RegisterContainer] 🔄 Redirection vers:', checkoutData.url)
+        
+        // Utiliser un flag pour éviter les mises à jour après redirection
+        const redirecting = true
+        
+        // ÉTAPE 4 : Rediriger vers la page de succès (simulation)
+        if (checkoutData.url) {
+          // Pour éviter l'erreur de mise à jour de composant, utiliser window.location.href
+          setTimeout(() => {
+            if (redirecting) {
+              window.location.href = checkoutData.url
+            }
+          }, 100)
         }
       } else {
-        throw new Error(result.error || "Erreur lors de la finalisation")
+        throw new Error(result.error || "Erreur lors de la finalisation du profil")
       }
     } catch (error) {
-      console.error('🔴 [RegisterContainer] Erreur lors de la finalisation:', error)
+      console.error('🔴 [RegisterContainer] Erreur lors de la finalisation avec abonnement:', error)
       
-      // Messages d'erreur plus informatifs
       if (error instanceof Error) {
         if (error.message.includes("validation") || error.message.includes("invalides")) {
           toast.error("Veuillez vérifier que tous les champs obligatoires sont remplis correctement.")
@@ -609,6 +538,83 @@ export default function RegisterContainer({
       } else {
         toast.error("Une erreur inattendue s'est produite. Veuillez réessayer.")
       }
+    } finally {
+      // 🔧 CORRECTION : Ne pas mettre setIsLoading(false) si on redirige
+      // pour éviter l'erreur de mise à jour de composant
+      if (typeof window !== 'undefined' && !window.location.href.includes('/inscription-reussie')) {
+        setIsLoading(false)
+      }
+    }
+  }
+
+  // 🔧 NOUVEAU : Handler pour "skip" l'abonnement
+  const handleSkipSubscription = async () => {
+    setIsLoading(true)
+    
+    try {
+      console.log('🟦 [RegisterContainer] 🔄 Skip abonnement - finalisation sans paiement')
+      
+      let userId = formData.userId;
+      if (!userId && session?.user?.id) {
+        userId = session.user.id;
+        setFormData(prev => ({ ...prev, userId }));
+      }
+
+      if (!userId) {
+        throw new Error("Impossible de déterminer l'ID utilisateur")
+      }
+
+      // Même logique d'onboarding mais sans abonnement
+      const onboardingData = {
+        userId: userId,
+        role: selectedRole!,
+        personalInfo: formData.personalInfo || {},
+        ...(selectedRole === UserRole.PROFESSIONAL && {
+          activity: formData.activity || {
+            type: "AUTRE",
+            experience: 0
+          },
+          bio: formData.bio || {
+            bio: "",
+            approach: ""
+          },
+          services: formData.services || { services: [] },
+          schedule: formData.schedule || undefined
+        }),
+        preferences: {
+          notifications: {
+            email: {
+              bookingConfirmation: formData.preferences?.notifications?.email?.bookingConfirmation ?? true,
+              bookingReminder: formData.preferences?.notifications?.email?.bookingReminder ?? true,
+              bookingCancellation: formData.preferences?.notifications?.email?.bookingCancellation ?? true,
+              newsletter: formData.preferences?.notifications?.email?.newsletter ?? false,
+              promotions: formData.preferences?.notifications?.email?.promotions ?? false,
+            },
+            sms: {
+              bookingConfirmation: formData.preferences?.notifications?.sms?.bookingConfirmation ?? false,
+              bookingReminder: formData.preferences?.notifications?.sms?.bookingReminder ?? false,
+              bookingCancellation: formData.preferences?.notifications?.sms?.bookingCancellation ?? false,
+            }
+          },
+          privacy: formData.preferences?.privacy || {
+            showProfile: true,
+            showAvailability: true
+          }
+        }
+      }
+
+      const result = await completeOnboarding(onboardingData)
+      
+      if (result.success) {
+        clearSavedData()
+        toast.success("Profil créé avec succès ! Vous pourrez configurer votre abonnement plus tard.")
+        router.push("/tableau-de-bord?welcome=true")
+      } else {
+        throw new Error(result.error || "Erreur lors de la finalisation")
+      }
+    } catch (error) {
+      console.error('🔴 [RegisterContainer] Erreur lors du skip:', error)
+      toast.error("Une erreur s'est produite. Veuillez réessayer.")
     } finally {
       setIsLoading(false)
     }
@@ -637,6 +643,7 @@ export default function RegisterContainer({
     clearSavedData()
   }
 
+  // 🔧 MODIFICATION : renderStep avec la nouvelle étape 7
   const renderStep = () => {
     switch (currentStep) {
       case 1:
@@ -668,12 +675,25 @@ export default function RegisterContainer({
         return <ServicesSetup professionalType={formData.activity?.type} onSubmit={handleServicesSubmit} onBack={handleBack} initialData={formData.services} isLoading={isLoading} />
       case 6:
         return <PreferencesForm userType={selectedRole!} onSubmit={handlePreferencesSubmit} onBack={handleBack} initialData={formData.preferences} isLoading={isLoading} />
+      case 7:
+        // 🔧 NOUVEAU : Étape abonnement avec plan pré-sélectionné
+        return <SubscriptionStep 
+          selectedPlan={selectedPlan || 'premium'} // Fallback sur premium si pas de plan
+          onSubmit={handleSubscriptionSubmit} 
+          onSkip={handleSkipSubscription}
+          onBack={handleBack} 
+          isLoading={isLoading}
+          userInfo={{
+            name: formData.personalInfo?.name,
+            email: formData.account?.email
+          }}
+        />
       default:
         return null
     }
   }
 
-  // Page de sélection de rôle minimaliste
+  // Page de sélection de rôle minimaliste (identique)
   if (!selectedRole) {
     return (
       <div className="min-h-screen bg-white">
@@ -747,7 +767,10 @@ export default function RegisterContainer({
 
               {/* Carte Professionnel */}
               <button
-                onClick={() => setSelectedRole(UserRole.PROFESSIONAL)}
+                onClick={() => {
+                  // 🔧 NOUVEAU : Rediriger vers choix d'abonnement au lieu de setSelectedRole
+                  router.push('/choix-abonnement')
+                }}
                 className="group relative p-12 rounded-2xl border border-gray-300 hover:border-gray-400 hover:shadow-lg transition-all duration-300 text-left bg-white"
               >
                 <div className="flex items-start justify-between mb-8">
@@ -756,7 +779,7 @@ export default function RegisterContainer({
                   </div>
                   <div className="text-right text-sm text-gray-500">
                     <div>Configuration en</div>
-                    <div className="font-medium text-gray-900">10 minutes</div>
+                    <div className="font-medium text-gray-900">12 minutes</div>
                   </div>
                 </div>
                 
@@ -830,16 +853,6 @@ export default function RegisterContainer({
                 <span>Environ {Math.ceil(estimatedTime)} min restantes</span>
               </div>
             </div>
-
-            {/* Indicateur de plan sélectionné */}
-            {selectedRole === UserRole.PROFESSIONAL && selectedPlan && (
-              <div className="text-center mb-6">
-                <div className="inline-flex items-center px-4 py-2 rounded-full text-sm bg-primary/10 text-primary border border-primary/20">
-                  <Shield className="h-4 w-4 mr-2" />
-                  Plan sélectionné : {selectedPlan === 'standard' ? 'Standard (20€/mois)' : 'Premium (40€/mois)'}
-                </div>
-              </div>
-            )}
 
             {/* Titre contextuel */}
             <div className="text-center mb-16">
