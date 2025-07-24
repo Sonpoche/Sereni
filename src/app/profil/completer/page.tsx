@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Clock } from "lucide-react"
 import { toast } from "sonner"
@@ -14,16 +14,24 @@ import BioForm from "@/components/register/steps/bio-form"
 import ServicesSetup from "@/components/register/steps/services-setup"
 import ScheduleForm from "@/components/register/steps/schedule-form"
 import PreferencesForm from "@/components/register/steps/preferences-form"
+import SubscriptionStep from "@/components/register/steps/subscription-step"
 import CompletionStepper from "@/components/profile/completion-stepper"
 import { UserRole } from "@prisma/client"
+import { useAuth } from "@/hooks/use-auth"
+import type { PreferencesFormData } from "@/components/register/steps/preferences-form"
 
 interface FormData {
   personalInfo?: {
-    name: string;
+    name?: string;
     phone?: string;
     address?: string;
     city?: string;
     postalCode?: string;
+    cabinetName?: string;
+    siret?: string;
+    website?: string;
+    latitude?: number;
+    longitude?: number;
   };
   activity?: {
     type: string;
@@ -50,41 +58,95 @@ interface FormData {
     endTime: string;
     isFullWeek: boolean;
   };
-  preferences?: {
-    notifications: {
-      email: {
-        bookingConfirmation: boolean;
-        bookingReminder: boolean;
-        bookingCancellation: boolean;
-        newsletter: boolean;
-        promotions: boolean;
-      };
-      sms: {
-        bookingConfirmation: boolean;
-        bookingReminder: boolean;
-        bookingCancellation: boolean;
-      };
-    };
-    privacy: {
-      showProfile: boolean;
-      showAvailability: boolean;
-    };
-  };
+  preferences?: PreferencesFormData;
 }
 
 // Clés pour le localStorage
 const STORAGE_KEYS = {
   COMPLETION_FORM_DATA: 'serenibook_completion_data',
   COMPLETION_CURRENT_STEP: 'serenibook_completion_step',
+  SELECTED_PLAN: 'serenibook_selected_plan'
 }
 
 export default function CompleteProfilePage() {
   const { data: session, status } = useSession({ required: true })
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { completeOnboarding } = useAuth()
+  
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<FormData>({})
   const [isLoading, setIsLoading] = useState(false)
   const [hasRestoredData, setHasRestoredData] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState<'standard' | 'premium'>('premium')
+
+  // ✅ Récupérer le plan sélectionné depuis la base de données en priorité
+  useEffect(() => {
+    const loadSelectedPlan = async () => {
+      // 1. Essayer de récupérer depuis les paramètres URL
+      const planFromUrl = searchParams.get('plan') as 'standard' | 'premium'
+      if (planFromUrl && (planFromUrl === 'standard' || planFromUrl === 'premium')) {
+        console.log('🟦 [CompleteProfile] Plan récupéré depuis URL:', planFromUrl)
+        setSelectedPlan(planFromUrl)
+        // Sauvegarder en localStorage et base si possible
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEYS.SELECTED_PLAN, planFromUrl)
+        }
+        if (session?.user?.id) {
+          try {
+            await fetch('/api/user/update-plan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ selectedPlan: planFromUrl })
+            })
+          } catch (error) {
+            console.log('🟨 [CompleteProfile] Erreur sauvegarde base (non critique):', error)
+          }
+        }
+        return
+      }
+
+      // 2. Si utilisateur connecté, essayer de récupérer depuis la base de données
+      if (session?.user?.id) {
+        try {
+          console.log('🟦 [CompleteProfile] Récupération du plan depuis la base de données...')
+          const response = await fetch('/api/user/get-plan')
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.data.selectedPlan) {
+              console.log('🟦 [CompleteProfile] Plan récupéré depuis la base:', data.data.selectedPlan)
+              setSelectedPlan(data.data.selectedPlan)
+              // Synchroniser avec localStorage
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(STORAGE_KEYS.SELECTED_PLAN, data.data.selectedPlan)
+              }
+              return
+            }
+          }
+        } catch (error) {
+          console.log('🟨 [CompleteProfile] Erreur récupération plan depuis base:', error)
+        }
+      }
+
+      // 3. Fallback : récupérer depuis localStorage
+      if (typeof window !== 'undefined') {
+        const savedPlan = localStorage.getItem(STORAGE_KEYS.SELECTED_PLAN) as 'standard' | 'premium'
+        if (savedPlan && (savedPlan === 'standard' || savedPlan === 'premium')) {
+          console.log('🟦 [CompleteProfile] Plan récupéré depuis localStorage:', savedPlan)
+          setSelectedPlan(savedPlan)
+          return
+        }
+      }
+
+      // 4. Défaut : premium
+      console.log('🟦 [CompleteProfile] Aucun plan trouvé, utilisation du défaut: premium')
+      setSelectedPlan('premium')
+    }
+
+    if (session?.user?.id || typeof window !== 'undefined') {
+      loadSelectedPlan()
+    }
+  }, [searchParams, session?.user?.id])
 
   // Fonction pour sauvegarder les données temporairement
   const saveDataToStorage = (data: any) => {
@@ -117,6 +179,7 @@ export default function CompleteProfilePage() {
       try {
         localStorage.removeItem(STORAGE_KEYS.COMPLETION_FORM_DATA)
         localStorage.removeItem(STORAGE_KEYS.COMPLETION_CURRENT_STEP)
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_PLAN)
       } catch (error) {
         console.error('Erreur lors du nettoyage:', error)
       }
@@ -161,24 +224,26 @@ export default function CompleteProfilePage() {
           saveDataToStorage(formData)
         }
         localStorage.setItem(STORAGE_KEYS.COMPLETION_CURRENT_STEP, currentStep.toString())
+        localStorage.setItem(STORAGE_KEYS.SELECTED_PLAN, selectedPlan)
       } catch (error) {
         console.error('Erreur lors de la sauvegarde:', error)
       }
     }
-  }, [formData, currentStep, hasRestoredData])
+  }, [formData, currentStep, hasRestoredData, selectedPlan])
 
-  // Calcul du temps estimé restant
+  // Calcul du temps estimé restant (ajout étape abonnement pour professionnels)
   const getEstimatedTime = () => {
     if (session?.user?.role === UserRole.CLIENT) {
       const times = [2, 0.5] // en minutes
       return times.slice(currentStep - 1).reduce((a, b) => a + b, 0)
     } else {
-      const times = [2, 2, 3, 4, 2, 1] // en minutes  
+      // Ajout de l'étape abonnement (2 min)
+      const times = [2, 2, 3, 4, 2, 1, 2] // en minutes (ajout étape 7: abonnement)
       return times.slice(currentStep - 1).reduce((a, b) => a + b, 0)
     }
   }
 
-  // Données de l'étape actuelle pour l'affichage
+  // Données de l'étape actuelle pour l'affichage (ajout étape abonnement)
   const getCurrentStepData = () => {
     if (session?.user?.role === UserRole.CLIENT) {
       const clientSteps = [
@@ -193,7 +258,8 @@ export default function CompleteProfilePage() {
         { title: "Votre présentation", description: "Parlez de votre approche" },
         { title: "Vos services", description: "Définissez vos prestations" },
         { title: "Vos horaires", description: "Définissez vos disponibilités" },
-        { title: "Préférences", description: "Configurez votre compte" }
+        { title: "Préférences", description: "Configurez votre compte" },
+        { title: "Abonnement", description: "Choisissez votre plan" }
       ]
       return professionalSteps[currentStep - 1]
     }
@@ -265,70 +331,248 @@ export default function CompleteProfilePage() {
     setCurrentStep(prev => prev + 1)
   }
 
-  const handlePreferencesSubmit = async (data: FormData["preferences"]) => {
-    console.log("Final Form Data:", {
+  // Pour les professionnels, on passe maintenant à l'étape abonnement au lieu de finaliser directement
+  const handlePreferencesSubmit = async (data: PreferencesFormData) => {
+    console.log("Preferences Data:", data);
+    const newFormData = {
       ...formData,
       preferences: data
-    });
+    }
+    setFormData(newFormData)
 
+    // Pour les clients, on finalise directement
+    if (session.user.role === UserRole.CLIENT) {
+      await finalizeProfileWithoutPayment(newFormData)
+    } else {
+      // Pour les professionnels, on passe à l'étape abonnement
+      setCurrentStep(prev => prev + 1)
+    }
+  }
+
+  // Handler pour l'abonnement (même logique que dans register-container.tsx)
+  const handleSubscriptionSubmit = async (subscriptionData: { plan: 'standard' | 'premium' }) => {
+    // Protection contre les double-clics
+    if (isLoading) {
+      console.log('🟨 [CompleteProfile] Double-clic détecté, ignoré')
+      return
+    }
+    
+    const executionId = Date.now()
+    console.log('🟦 [CompleteProfile] 🚀 DÉBUT handleSubscriptionSubmit - ID:', executionId)
+    setIsLoading(true)
+    
+    try {
+      console.log('🟦 [CompleteProfile] Plan sélectionné:', subscriptionData.plan)
+
+      // Construction des données d'onboarding COMPLÈTES (même logique que register-container)
+      const onboardingData = {
+        userId: session.user.id,
+        role: session.user.role,
+        personalInfo: formData.personalInfo || {}, // S'assurer que c'est un objet vide et non undefined
+        activity: formData.activity || {
+          type: "AUTRE",
+          experience: 0
+        },
+        bio: formData.bio || {
+          bio: "",
+          approach: ""
+        },
+        services: formData.services || { services: [] },
+        schedule: formData.schedule || undefined,
+        preferences: {
+          notifications: {
+            email: {
+              bookingConfirmation: formData.preferences?.notifications?.email?.bookingConfirmation ?? true,
+              bookingReminder: formData.preferences?.notifications?.email?.bookingReminder ?? true,
+              bookingCancellation: formData.preferences?.notifications?.email?.bookingCancellation ?? true,
+              newsletter: formData.preferences?.notifications?.email?.newsletter ?? false,
+              promotions: formData.preferences?.notifications?.email?.promotions ?? false,
+            },
+            sms: {
+              bookingConfirmation: formData.preferences?.notifications?.sms?.bookingConfirmation ?? false,
+              bookingReminder: formData.preferences?.notifications?.sms?.bookingReminder ?? false,
+              bookingCancellation: formData.preferences?.notifications?.sms?.bookingCancellation ?? false,
+            }
+          },
+          privacy: formData.preferences?.privacy || {
+            showProfile: true,
+            showAvailability: true
+          }
+        }
+      }
+
+      console.log('🟦 [CompleteProfile] 📤 Complétion onboarding AVANT paiement...')
+
+      // ÉTAPE 1 : Compléter l'onboarding AVANT de créer l'abonnement
+      console.log('🟦 [CompleteProfile] 🔄 Appel completeOnboarding... ID:', executionId)
+      const result = await completeOnboarding(onboardingData)
+      console.log('🟦 [CompleteProfile] 🔄 Retour completeOnboarding ID:', executionId, 'Result:', result)
+      
+      if (result.success) {
+        console.log('🟦 [CompleteProfile] ✅ Onboarding complété avec succès - ID:', executionId)
+        
+        // Vérifier si le profil existait déjà
+        if (result.message && result.message.includes("existe déjà")) {
+          console.log('🟨 [CompleteProfile] Profil déjà existant, skip paiement - ID:', executionId)
+          clearSavedData()
+          toast.success("Profil déjà configuré ! Redirection vers votre tableau de bord.")
+          router.push("/tableau-de-bord?welcome=true")
+          return
+        }
+        
+        toast.success("Profil créé avec succès !")
+        
+        // ÉTAPE 2 : Créer la session de checkout Stripe
+        console.log('🟦 [CompleteProfile] 💳 Création session checkout Stripe... ID:', executionId)
+        const response = await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            plan: subscriptionData.plan,
+            returnUrl: `${window.location.origin}/inscription-reussie?success=true`
+          }),
+        })
+
+        const checkoutData = await response.json()
+        console.log('🟦 [CompleteProfile] Réponse Stripe ID:', executionId, 'Data:', checkoutData)
+
+        if (!response.ok) {
+          console.error('🔴 [CompleteProfile] Erreur Stripe checkout ID:', executionId, 'Error:', checkoutData)
+          throw new Error(checkoutData.error || 'Erreur lors de la création de la session de paiement')
+        }
+
+        console.log('🟦 [CompleteProfile] ✅ Session checkout créée, nettoyage localStorage - ID:', executionId)
+
+        // ÉTAPE 3 : Nettoyer localStorage maintenant que tout est OK
+        clearSavedData()
+
+        console.log('🟦 [CompleteProfile] 🔄 Redirection vers:', checkoutData.url, '- ID:', executionId)
+        
+        // ÉTAPE 4 : Rediriger vers Stripe Checkout
+        if (checkoutData.url) {
+          setTimeout(() => {
+            console.log('🟦 [CompleteProfile] 🌐 Redirection effective - ID:', executionId)
+            window.location.href = checkoutData.url
+          }, 100)
+        }
+      } else {
+        console.log('🔴 [CompleteProfile] ❌ Onboarding a échoué - ID:', executionId, 'Result:', result)
+        throw new Error(result.error || "Erreur lors de la finalisation du profil")
+      }
+    } catch (error) {
+      console.error('🔴 [CompleteProfile] Erreur lors de la finalisation avec abonnement - ID:', executionId, 'Error:', error)
+      
+      // Gestion d'erreur détaillée (même logique que register-container)
+      let errorMessage = "Une erreur inattendue s'est produite. Veuillez réessayer."
+      
+      if (error instanceof Error) {
+        console.log('🔴 [CompleteProfile] Message d\'erreur - ID:', executionId, 'Message:', error.message)
+        
+        if (error.message.includes("validation") || error.message.includes("invalides")) {
+          errorMessage = "Veuillez vérifier que tous les champs obligatoires sont remplis correctement."
+        } else if (error.message.includes("utilisateur")) {
+          errorMessage = "Problème avec votre compte. Veuillez recommencer l'inscription."
+        } else if (error.message.includes("stripe") || error.message.includes("paiement")) {
+          errorMessage = "Erreur lors du traitement du paiement. Votre profil a été créé mais l'abonnement n'a pas pu être activé."
+        } else if (error.message.includes("existe déjà") || error.message.includes("already exists")) {
+          console.log('🟨 [CompleteProfile] Profil existe déjà - redirection - ID:', executionId)
+          clearSavedData()
+          toast.success("Votre profil existe déjà ! Redirection vers votre tableau de bord.")
+          router.push("/tableau-de-bord?welcome=true")
+          return
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
+      console.log('🔴 [CompleteProfile] Toast erreur affiché - ID:', executionId, 'Message:', errorMessage)
+      toast.error(errorMessage)
+    } finally {
+      console.log('🟦 [CompleteProfile] Finally block - ID:', executionId, 'URL actuelle:', typeof window !== 'undefined' ? window.location.href : 'undefined')
+      if (typeof window !== 'undefined' && !window.location.href.includes('/inscription-reussie')) {
+        console.log('🟦 [CompleteProfile] setIsLoading(false) - ID:', executionId)
+        setIsLoading(false)
+      } else {
+        console.log('🟦 [CompleteProfile] Skip setIsLoading car redirection - ID:', executionId)
+      }
+    }
+  }
+
+  // Handler pour "skip" l'abonnement (même logique que register-container)
+  const handleSkipSubscription = async () => {
+    setIsLoading(true)
+    
+    try {
+      console.log('🟦 [CompleteProfile] 🔄 Skip abonnement - finalisation sans paiement')
+      
+      await finalizeProfileWithoutPayment(formData)
+    } catch (error) {
+      console.error('🔴 [CompleteProfile] Erreur lors du skip:', error)
+      toast.error("Une erreur s'est produite. Veuillez réessayer.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Fonction pour finaliser le profil sans paiement
+  const finalizeProfileWithoutPayment = async (finalFormData: FormData) => {
     setIsLoading(true)
     try {
       // Préparer les données pour l'API
       const onboardingData = {
         userId: session.user.id,
         role: session.user.role,
-        personalInfo: formData.personalInfo,
-        activity: formData.activity,
-        bio: formData.bio,
-        services: formData.services,
-        schedule: formData.schedule,
-        preferences: data
+        personalInfo: finalFormData.personalInfo || {}, // S'assurer que c'est un objet vide et non undefined
+        activity: finalFormData.activity,
+        bio: finalFormData.bio,
+        services: finalFormData.services,
+        schedule: finalFormData.schedule,
+        preferences: finalFormData.preferences || {
+          notifications: {
+            email: {
+              bookingConfirmation: true,
+              bookingReminder: true,
+              bookingCancellation: true,
+              newsletter: false,
+              promotions: false,
+            },
+            sms: {
+              bookingConfirmation: false,
+              bookingReminder: false,
+              bookingCancellation: false,
+            }
+          },
+          privacy: {
+            showProfile: true,
+            showAvailability: true
+          }
+        }
       }
 
       console.log("Sending onboarding data:", onboardingData)
 
-      const response = await fetch("/api/onboarding", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(onboardingData),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Erreur lors de la sauvegarde du profil")
-      }
-
-      const result = await response.json()
+      const result = await completeOnboarding(onboardingData)
       
       if (result.success) {
         clearSavedData() // Nettoyer les données après succès
         toast.success("Profil complété avec succès !")
         
-        // ✅ NOUVEAU: Vérifier si c'est un professionnel avec un plan sélectionné
-        const selectedPlan = localStorage.getItem('serenibook_selected_plan')
-        const isSubscriptionFlow = localStorage.getItem('serenibook_subscription_flow')
-        
-        if (session.user.role === 'PROFESSIONAL' && selectedPlan && isSubscriptionFlow) {
-          // Rediriger vers la finalisation de l'abonnement
-          router.push('/finaliser-abonnement')
-        } else {
-          // Forcer la mise à jour de la session et rediriger
-          try {
-            await fetch("/api/auth/session", {
-              method: "GET",
-              headers: {
-                "Cache-Control": "no-cache"
-              }
-            })
-            
-            setTimeout(() => {
-              window.location.href = "/tableau-de-bord"
-            }, 1000)
-          } catch (error) {
+        // Forcer la mise à jour de la session et rediriger
+        try {
+          await fetch("/api/auth/session", {
+            method: "GET",
+            headers: {
+              "Cache-Control": "no-cache"
+            }
+          })
+          
+          setTimeout(() => {
             window.location.href = "/tableau-de-bord"
-          }
+          }, 1000)
+        } catch (error) {
+          window.location.href = "/tableau-de-bord"
         }
       } else {
         throw new Error(result.error || "Erreur lors de la création du profil")
@@ -389,10 +633,11 @@ export default function CompleteProfilePage() {
               </p>
             </div>
 
-            {/* Stepper avec icônes */}
+            {/* Stepper avec icônes (ajout du prop includeSubscription pour les professionnels) */}
             <CompletionStepper 
               userType={session.user.role}
               currentStep={currentStep}
+              includeSubscription={session.user.role === UserRole.PROFESSIONAL}
             />
           </div>
 
@@ -454,6 +699,21 @@ export default function CompleteProfilePage() {
                 onBack={handleBack}
                 isLoading={isLoading}
                 initialData={formData.preferences}
+              />
+            )}
+
+            {/* Étape Abonnement - uniquement pour les professionnels à l'étape 7 */}
+            {currentStep === 7 && session.user.role === UserRole.PROFESSIONAL && (
+              <SubscriptionStep 
+                selectedPlan={selectedPlan}
+                onSubmit={handleSubscriptionSubmit} 
+                onSkip={handleSkipSubscription}
+                onBack={handleBack} 
+                isLoading={isLoading}
+                userInfo={{
+                  name: formData.personalInfo?.name,
+                  email: session.user.email || undefined
+                }}
               />
             )}
           </div>

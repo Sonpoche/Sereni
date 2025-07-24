@@ -12,6 +12,7 @@ import {
   Calendar,
   Clock, 
   Zap,
+  CreditCard,
   CheckCircle
 } from "lucide-react"
 
@@ -26,9 +27,15 @@ type StepConfig = {
 interface CompletionStepperProps {
   userType: UserRole;
   currentStep: number;
+  includeSubscription?: boolean;
 }
 
-export default function CompletionStepper({ userType, currentStep }: CompletionStepperProps) {
+export default function CompletionStepper({ 
+  userType, 
+  currentStep,
+  includeSubscription = false 
+}: CompletionStepperProps) {
+  
   // Configuration des étapes selon le type d'utilisateur
   const getSteps = (): StepConfig[] => {
     if (userType === UserRole.CLIENT) {
@@ -56,7 +63,7 @@ export default function CompletionStepper({ userType, currentStep }: CompletionS
         }
       ]
     } else {
-      return [
+      const professionalSteps = [
         { 
           id: 1, 
           title: "Compte", 
@@ -102,11 +109,24 @@ export default function CompletionStepper({ userType, currentStep }: CompletionS
         { 
           id: 7, 
           title: "Préférences", 
-          description: "Finalisation", 
+          description: "Notifications", 
           icon: Zap,
           estimatedTime: "1 min"
         }
       ]
+
+      // Ajouter l'étape abonnement si demandée
+      if (includeSubscription) {
+        professionalSteps.push({
+          id: 8,
+          title: "Abonnement",
+          description: "Votre plan",
+          icon: CreditCard,
+          estimatedTime: "2 min"
+        })
+      }
+
+      return professionalSteps
     }
   }
 
@@ -116,7 +136,7 @@ export default function CompletionStepper({ userType, currentStep }: CompletionS
   const progressPercentage = (adjustedCurrentStep / steps.length) * 100
 
   return (
-    <div className="relative mb-20 max-w-4xl mx-auto">
+    <div className="relative mb-20 max-w-6xl mx-auto">
       {/* Barre de progression */}
       <div className="absolute top-6 left-0 w-full h-0.5 bg-gray-200">
         <div 
@@ -149,19 +169,19 @@ export default function CompletionStepper({ userType, currentStep }: CompletionS
                 )}
               >
                 {isCompleted ? (
-                  <CheckCircle className="w-6 h-6" />
+                  <CheckCircle className="w-5 h-5" />
                 ) : (
-                  <StepIcon className="w-6 h-6" />
+                  <StepIcon className="w-5 h-5" />
                 )}
               </div>
 
               {/* Titre et description */}
-              <div className="mt-4 text-center">
+              <div className="mt-3 text-center max-w-28">
                 <div
                   className={cn(
                     "text-sm font-medium transition-colors",
-                    isActive && "text-primary",
-                    isCompleted && "text-gray-900",
+                    isActive && "text-gray-900",
+                    isCompleted && "text-gray-600",
                     isUpcoming && "text-gray-400"
                   )}
                 >
@@ -170,21 +190,12 @@ export default function CompletionStepper({ userType, currentStep }: CompletionS
                 <div
                   className={cn(
                     "text-xs mt-1 transition-colors",
-                    isActive && "text-primary/70",
+                    isActive && "text-gray-600",
                     isCompleted && "text-gray-500",
-                    isUpcoming && "text-gray-400"
+                    isUpcoming && "text-gray-300"
                   )}
                 >
                   {step.description}
-                </div>
-                <div
-                  className={cn(
-                    "text-xs mt-1 transition-colors",
-                    isActive && "text-primary/50",
-                    "text-gray-400"
-                  )}
-                >
-                  {step.estimatedTime}
                 </div>
               </div>
             </div>

@@ -87,6 +87,7 @@ model User {
   role          UserRole  @default(CLIENT)
   isFirstVisit  Boolean   @default(true)
   hasProfile    Boolean   @default(false)
+  selectedPlan String? // 'standard' | 'premium'
   
   // NOUVEAU : Stripe Customer ID pour abonnements
   stripeCustomerId String? @unique

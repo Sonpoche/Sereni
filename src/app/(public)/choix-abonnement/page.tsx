@@ -1,8 +1,10 @@
 // src/app/(public)/choix-abonnement/page.tsx
+
 "use client"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"  // ✅ AJOUT
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -64,18 +66,82 @@ const features = [
 
 export default function ChoixAbonnementPage() {
   const router = useRouter()
+  const { data: session } = useSession()  // ✅ AJOUT
   const [loading, setLoading] = useState<string | null>(null)
+
+  // ✅ FONCTION MISE À JOUR pour sauvegarder en base ET localStorage
+  const savePlanSelection = async (plan: 'standard' | 'premium') => {
+    try {
+      // 1. Sauvegarder dans localStorage (immédiat, fonctionne toujours)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('serenibook_selected_plan', plan)
+        console.log('🟦 [ChoixAbonnement] Plan sauvé dans localStorage:', plan)
+      }
+
+      // 2. Si utilisateur connecté, sauvegarder aussi en base
+      if (session?.user?.id) {
+        console.log('🟦 [ChoixAbonnement] Sauvegarde du plan en base pour:', session.user.email)
+        
+        const response = await fetch('/api/user/update-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ selectedPlan: plan })
+        })
+
+        if (response.ok) {
+          console.log('🟦 [ChoixAbonnement] Plan sauvé en base avec succès')
+        } else {
+          console.log('🟨 [ChoixAbonnement] Erreur sauvegarde base, localStorage utilisé en fallback')
+        }
+      } else {
+        console.log('🟨 [ChoixAbonnement] Utilisateur non connecté, sauvegarde localStorage uniquement')
+      }
+
+      return true
+    } catch (error) {
+      console.error('🔴 [ChoixAbonnement] Erreur lors de la sauvegarde:', error)
+      // En cas d'erreur, au moins localStorage fonctionne
+      return true
+    }
+  }
 
   const handlePlanSelection = async (plan: 'standard' | 'premium') => {
     setLoading(plan)
 
     try {
+      // Sauvegarder le plan (base + localStorage)
+      await savePlanSelection(plan)
+      
       toast.success(`Plan ${plan} sélectionné ! Commençons la création de votre profil...`)
       
-      // 🔧 CORRECTION PRINCIPALE : Rediriger vers /onboarding avec les bons paramètres
+      // Rediriger vers l'onboarding
       setTimeout(() => {
         router.push(`/onboarding?role=PROFESSIONAL&flow=email&plan=${plan}`)
-      }, 1000) // Petit délai pour voir le toast
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Erreur lors de la sélection du plan:', error)
+      toast.error('Erreur lors de la sélection. Veuillez réessayer.')
+      setLoading(null)
+    }
+  }
+
+  // ✅ NOUVELLE FONCTION pour les utilisateurs existants
+  const handleExistingUserPlan = async (plan: 'standard' | 'premium') => {
+    setLoading(`existing-${plan}`)
+
+    try {
+      // Sauvegarder le plan (base + localStorage)
+      await savePlanSelection(plan)
+      
+      toast.success(`Plan ${plan} sélectionné ! Redirection vers la complétion de votre profil...`)
+      
+      // Rediriger vers la complétion de profil
+      setTimeout(() => {
+        router.push(`/profil/completer?plan=${plan}`)
+      }, 1000)
       
     } catch (error) {
       console.error('Erreur lors de la sélection du plan:', error)
@@ -155,6 +221,7 @@ export default function ChoixAbonnementPage() {
               <p className="text-sm text-gray-500 mt-2">Facturé après configuration</p>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Bouton pour nouveaux utilisateurs */}
               <Button 
                 className="w-full h-12 bg-blue-600 hover:bg-blue-700" 
                 onClick={() => handlePlanSelection('standard')}
@@ -167,9 +234,26 @@ export default function ChoixAbonnementPage() {
                   </>
                 ) : (
                   <>
-                    Commencer avec Standard
+                    Créer mon compte Standard
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
+                )}
+              </Button>
+              
+              {/* ✅ NOUVEAU: Bouton pour utilisateurs existants */}
+              <Button 
+                variant="outline"
+                className="w-full h-10 border-blue-600 text-blue-600 hover:bg-blue-50" 
+                onClick={() => handleExistingUserPlan('standard')}
+                disabled={!!loading}
+              >
+                {loading === 'existing-standard' ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    Sélection...
+                  </>
+                ) : (
+                  'J\'ai déjà un compte'
                 )}
               </Button>
               
@@ -230,6 +314,7 @@ export default function ChoixAbonnementPage() {
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Bouton pour nouveaux utilisateurs */}
               <Button 
                 className="w-full h-14 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-lg font-semibold" 
                 onClick={() => handlePlanSelection('premium')}
@@ -243,9 +328,26 @@ export default function ChoixAbonnementPage() {
                 ) : (
                   <>
                     <Star className="mr-2 h-5 w-5" />
-                    Commencer avec Premium
+                    Créer mon compte Premium
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
+                )}
+              </Button>
+              
+              {/* ✅ NOUVEAU: Bouton pour utilisateurs existants */}
+              <Button 
+                variant="outline"
+                className="w-full h-10 border-purple-600 text-purple-600 hover:bg-purple-50" 
+                onClick={() => handleExistingUserPlan('premium')}
+                disabled={!!loading}
+              >
+                {loading === 'existing-premium' ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
+                    Sélection...
+                  </>
+                ) : (
+                  'J\'ai déjà un compte'
                 )}
               </Button>
               

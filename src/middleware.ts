@@ -1,4 +1,5 @@
 // src/middleware.ts
+
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { auth } from "@/lib/auth/auth.config"
@@ -15,8 +16,8 @@ const publicPaths = [
   "/cours-collectifs",
   "/recherche",
   "/tarifs",
-  "/choix-abonnement",      // ✅ AJOUT: Page de choix d'abonnement
-  "/inscription-reussie"    // ✅ GARDE: Page de confirmation après Stripe
+  "/choix-abonnement",
+  "/inscription-reussie"
 ]
 
 // Pages qui requièrent une authentification
@@ -33,15 +34,21 @@ const protectedPaths = [
 
 // Pages qui ne nécessitent pas un profil complet (en plus des publicPaths)
 const allowedIncompleteProfilePaths = [
-  "/profil/completer",
+  "/onboarding",  // ✅ CHANGEMENT : onboarding au lieu de profil/completer
   "/api/",
-  "/inscription-reussie"   // ✅ GARDE: Permettre l'accès même avec profil incomplet
+  "/inscription-reussie"
 ]
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   
   console.log(`🔄 [Middleware] Chemin: ${pathname}`)
+
+  // ✅ NOUVEAU : Rediriger /profil/completer vers /onboarding
+  if (pathname.startsWith('/profil/completer')) {
+    console.log(`🔄 [Middleware] Redirection /profil/completer -> /onboarding`)
+    return NextResponse.redirect(new URL('/onboarding', request.url))
+  }
 
   // Vérifier si le chemin actuel est public - FIX: comparaison exacte pour "/"
   const isPublicPath = publicPaths.some(path => {
@@ -68,24 +75,33 @@ export async function middleware(request: NextRequest) {
     console.log(`🔄 [Middleware] Utilisateur: ${session.user.email}, hasProfile: ${session.user.hasProfile}`)
   }
 
-  // Protection spéciale pour la page de complétion de profil
-  if (pathname === "/profil/completer") {
+  // ✅ MODIFICATION : Protection pour /onboarding au lieu de /profil/completer
+  if (pathname === "/onboarding") {
     if (!session) {
-      console.log(`🔄 [Middleware] Redirection vers connexion - non connecté`)
-      return NextResponse.redirect(new URL("/connexion", request.url))
+      // Utilisateur non connecté : vérifier qu'il y a les bons paramètres
+      const role = request.nextUrl.searchParams.get('role')
+      const flow = request.nextUrl.searchParams.get('flow')
+      
+      if (!role) {
+        console.log(`🔄 [Middleware] Redirection vers inscription - paramètres manquants`)
+        return NextResponse.redirect(new URL("/inscription", request.url))
+      }
+      
+      console.log(`🔄 [Middleware] Accès autorisé à onboarding (nouveau utilisateur)`)
+      return NextResponse.next()
     }
 
-    // Si le profil est déjà complété, rediriger vers le tableau de bord
+    // Utilisateur connecté : si profil complet, rediriger vers tableau de bord
     if (session.user.hasProfile) {
       console.log(`🔄 [Middleware] Redirection vers tableau-de-bord - profil complet`)
       return NextResponse.redirect(new URL("/tableau-de-bord", request.url))
     }
 
-    console.log(`🔄 [Middleware] Accès autorisé à profil/completer`)
+    console.log(`🔄 [Middleware] Accès autorisé à onboarding (complétion de profil)`)
     return NextResponse.next()
   }
 
-  // ✅ GARDE: Protection spéciale pour inscription-reussie (retour de Stripe)
+  // Protection spéciale pour inscription-reussie (retour de Stripe)
   if (pathname === "/inscription-reussie") {
     if (!session) {
       console.log(`🔄 [Middleware] Redirection vers connexion - page succès non connecté`)
@@ -98,13 +114,13 @@ export async function middleware(request: NextRequest) {
 
   // Si l'utilisateur est sur une page publique et est connecté
   if (session && (pathname === "/connexion" || pathname === "/inscription")) {
-    // Si profil incomplet, rediriger vers profil/completer
+    // Si profil incomplet, rediriger vers onboarding
     if (!session.user.hasProfile) {
-      console.log(`🔄 [Middleware] Redirection vers profil/completer - depuis page publique`)
-      return NextResponse.redirect(new URL("/profil/completer", request.url))
+      console.log(`🔄 [Middleware] Redirection vers onboarding - depuis page publique`)
+      return NextResponse.redirect(new URL("/onboarding", request.url))
     }
     
-    // ✅ MODIFICATION: Vérifier d'abord si on est dans un flow de retour Stripe
+    // Vérifier d'abord si on est dans un flow de retour Stripe
     const isInSubscriptionFlow = request.nextUrl.searchParams.get('success') === 'true' || 
                                 request.nextUrl.searchParams.get('session_id')
     
@@ -134,8 +150,8 @@ export async function middleware(request: NextRequest) {
 
   // LOGIQUE PRINCIPALE : Si connecté mais profil incomplet
   if (session && !session.user.hasProfile && !isAllowedIncompleteProfilePath && !isPublicPath) {
-    console.log(`🔄 [Middleware] Redirection vers profil/completer - Profil incomplet pour ${session.user.email}`)
-    return NextResponse.redirect(new URL("/profil/completer", request.url))
+    console.log(`🔄 [Middleware] Redirection vers onboarding - Profil incomplet pour ${session.user.email}`)
+    return NextResponse.redirect(new URL("/onboarding", request.url))
   }
 
   console.log(`🔄 [Middleware] Accès autorisé à ${pathname}`)
