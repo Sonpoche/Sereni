@@ -72,9 +72,9 @@ export default function ChoixAbonnementPage() {
     try {
       toast.success(`Plan ${plan} sélectionné ! Commençons la création de votre profil...`)
       
-      // 🔧 MODIFICATION PRINCIPALE : Rediriger vers l'onboarding avec le plan pré-sélectionné
+      // 🔧 CORRECTION PRINCIPALE : Rediriger vers /onboarding avec les bons paramètres
       setTimeout(() => {
-        router.push(`/inscription?role=PROFESSIONAL&plan=${plan}`)
+        router.push(`/onboarding?role=PROFESSIONAL&flow=email&plan=${plan}`)
       }, 1000) // Petit délai pour voir le toast
       
     } catch (error) {

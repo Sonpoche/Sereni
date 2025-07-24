@@ -16,7 +16,7 @@ import ActivityForm from "./steps/activity-form"
 import BioForm from "./steps/bio-form"
 import PreferencesForm from "./steps/preferences-form"
 import ServicesSetup from "./steps/services-setup"
-import SubscriptionStep from "./steps/subscription-step" // NOUVEAU
+import SubscriptionStep from "./steps/subscription-step"
 import type { PreferencesFormData } from "./steps/preferences-form"
 import { cn } from "@/lib/utils"
 
@@ -82,7 +82,8 @@ interface RegisterContainerProps {
 const STORAGE_KEYS = {
   FORM_DATA: 'serenibook_onboarding_data',
   CURRENT_STEP: 'serenibook_onboarding_step',
-  SELECTED_ROLE: 'serenibook_onboarding_role'
+  SELECTED_ROLE: 'serenibook_onboarding_role',
+  SELECTED_PLAN: 'serenibook_selected_plan'
 }
 
 export default function RegisterContainer({ 
@@ -92,6 +93,7 @@ export default function RegisterContainer({
   const { data: session, status } = useSession()
   const searchParams = useSearchParams()
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(initialRole || null)
+  const [selectedPlan, setSelectedPlan] = useState<'standard' | 'premium'>('premium')
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [formData, setFormData] = useState<FormData>({})
   const [isLoading, setIsLoading] = useState(false)
@@ -102,7 +104,28 @@ export default function RegisterContainer({
   const router = useRouter()
   const { register, completeOnboarding } = useAuth()
 
-  // 🔧 MODIFICATION : useEffect de restauration des données (identique)
+  // useEffect pour récupérer le plan sélectionné
+  useEffect(() => {
+    // Récupérer depuis les paramètres URL
+    const planFromUrl = searchParams.get('plan') as 'standard' | 'premium'
+    if (planFromUrl && (planFromUrl === 'standard' || planFromUrl === 'premium')) {
+      setSelectedPlan(planFromUrl)
+      // Sauvegarder dans localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.SELECTED_PLAN, planFromUrl)
+      }
+    } else {
+      // Récupérer depuis localStorage si pas dans URL
+      if (typeof window !== 'undefined') {
+        const savedPlan = localStorage.getItem(STORAGE_KEYS.SELECTED_PLAN) as 'standard' | 'premium'
+        if (savedPlan && (savedPlan === 'standard' || savedPlan === 'premium')) {
+          setSelectedPlan(savedPlan)
+        }
+      }
+    }
+  }, [searchParams])
+
+  // useEffect de restauration des données
   useEffect(() => {
     console.log('🔄 [RegisterContainer] useEffect déclenché avec:', {
       status,
@@ -161,6 +184,13 @@ export default function RegisterContainer({
           }
         }
 
+        // Restauration du plan sélectionné
+        const savedPlan = localStorage.getItem(STORAGE_KEYS.SELECTED_PLAN) as 'standard' | 'premium'
+        if (savedPlan && (savedPlan === 'standard' || savedPlan === 'premium')) {
+          console.log('🟦 [RegisterContainer] Restauration plan:', savedPlan)
+          setSelectedPlan(savedPlan)
+        }
+
         setHasRestoredData(true)
 
         const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
@@ -179,7 +209,7 @@ export default function RegisterContainer({
     }
   }, [initialStep, initialRole, status, session, isLoading])
 
-  // useEffect pour corriger le userId manquant (identique)
+  // useEffect pour corriger le userId manquant
   useEffect(() => {
     if (status === "authenticated" && session?.user?.id && hasRestoredData && !userIdFixed && !formData.userId) {
       console.log('🟨 [RegisterContainer] CORRECTION: Utilisateur connecté sans userId dans formData')
@@ -191,7 +221,7 @@ export default function RegisterContainer({
     }
   }, [status, session?.user?.id, hasRestoredData, userIdFixed, formData.userId])
 
-  // Nettoyer automatiquement si l'utilisateur se déconnecte (identique)
+  // Nettoyer automatiquement si l'utilisateur se déconnecte
   useEffect(() => {
     if (status === "unauthenticated" && hasRestoredData) {
       const savedFormData = localStorage.getItem(STORAGE_KEYS.FORM_DATA)
@@ -207,7 +237,7 @@ export default function RegisterContainer({
     }
   }, [status, hasRestoredData, initialRole])
 
-  // Sauvegarder les données à chaque changement (identique)
+  // Sauvegarder les données à chaque changement
   useEffect(() => {
     if (hasRestoredData && userIdFixed && typeof window !== 'undefined') {
       try {
@@ -216,11 +246,14 @@ export default function RegisterContainer({
         if (selectedRole) {
           localStorage.setItem(STORAGE_KEYS.SELECTED_ROLE, selectedRole)
         }
+        if (selectedPlan) {
+          localStorage.setItem(STORAGE_KEYS.SELECTED_PLAN, selectedPlan)
+        }
       } catch (error) {
         console.error('🔴 [RegisterContainer] Erreur lors de la sauvegarde:', error)
       }
     }
-  }, [formData, currentStep, selectedRole, hasRestoredData, userIdFixed])
+  }, [formData, currentStep, selectedRole, selectedPlan, hasRestoredData, userIdFixed])
 
   // Fonction pour nettoyer les données sauvegardées
   const clearSavedData = () => {
@@ -228,6 +261,7 @@ export default function RegisterContainer({
       localStorage.removeItem(STORAGE_KEYS.FORM_DATA)
       localStorage.removeItem(STORAGE_KEYS.CURRENT_STEP)
       localStorage.removeItem(STORAGE_KEYS.SELECTED_ROLE)
+      localStorage.removeItem(STORAGE_KEYS.SELECTED_PLAN)
     }
   }
 
@@ -241,7 +275,7 @@ export default function RegisterContainer({
     }
   }, [selectedRole, currentStep])
 
-  // 🔧 MODIFICATION PRINCIPALE : Définition des étapes avec métadonnées UX (ÉTAPE 7 AJOUTÉE)
+  // Définition des étapes avec métadonnées UX
   const getSteps = () => {
     if (selectedRole === UserRole.CLIENT) {
       return [
@@ -311,7 +345,6 @@ export default function RegisterContainer({
           icon: Zap,
           estimatedTime: "1 min"
         },
-        // 🔧 NOUVEAU : Étape 7 - Abonnement
         { 
           id: 7, 
           title: "Abonnement", 
@@ -327,7 +360,7 @@ export default function RegisterContainer({
   const currentStepData = steps.find(step => step.id === currentStep)
   const progressPercentage = (currentStep / steps.length) * 100
 
-  // Handlers pour les étapes (identiques jusqu'à étape 6)
+  // Handlers pour les étapes
   const handleAccountSubmit = async (data: AccountFormData) => {
     if (!selectedRole) return;
     
@@ -408,19 +441,25 @@ export default function RegisterContainer({
     setCurrentStep(6)
   }
 
-  // 🔧 MODIFICATION : Handler pour les préférences (étape 6) - Simplifié pour aller à l'étape 7
   const handlePreferencesSubmit = async (data: PreferencesFormData) => {
     console.log('🟦 [RegisterContainer] Soumission préférences - passage à étape 7')
     setFormData(prev => ({ ...prev, preferences: data }))
-    setCurrentStep(7) // ✅ Aller à l'étape abonnement
+    setCurrentStep(7)
   }
 
-  // 🔧 NOUVEAU : Handler pour l'abonnement (étape 7)
+  // Handler pour l'abonnement (étape 7) - AVEC DEBUG
   const handleSubscriptionSubmit = async (subscriptionData: { plan: 'standard' | 'premium' }) => {
+    // Protection contre les double-clics
+    if (isLoading) {
+      console.log('🟨 [RegisterContainer] Double-clic détecté, ignoré')
+      return
+    }
+    
+    const executionId = Date.now()
+    console.log('🟦 [RegisterContainer] 🚀 DÉBUT handleSubscriptionSubmit - ID:', executionId)
     setIsLoading(true)
     
     try {
-      console.log('🟦 [RegisterContainer] 🚀 DÉBUT handleSubscriptionSubmit')
       console.log('🟦 [RegisterContainer] Plan sélectionné:', subscriptionData.plan)
       
       // Déterminer le userId
@@ -476,14 +515,26 @@ export default function RegisterContainer({
       console.log('🟦 [RegisterContainer] 📤 Complétion onboarding AVANT paiement...')
 
       // ÉTAPE 1 : Compléter l'onboarding AVANT de créer l'abonnement
+      console.log('🟦 [RegisterContainer] 🔄 Appel completeOnboarding... ID:', executionId)
       const result = await completeOnboarding(onboardingData)
+      console.log('🟦 [RegisterContainer] 🔄 Retour completeOnboarding ID:', executionId, 'Result:', result)
       
       if (result.success) {
-        console.log('🟦 [RegisterContainer] ✅ Onboarding complété avec succès')
+        console.log('🟦 [RegisterContainer] ✅ Onboarding complété avec succès - ID:', executionId)
+        
+        // Vérifier si le profil existait déjà
+        if (result.message && result.message.includes("existe déjà")) {
+          console.log('🟨 [RegisterContainer] Profil déjà existant, skip paiement - ID:', executionId)
+          clearSavedData()
+          toast.success("Profil déjà configuré ! Redirection vers votre tableau de bord.")
+          router.push("/tableau-de-bord?welcome=true")
+          return
+        }
+        
         toast.success("Profil créé avec succès !")
         
         // ÉTAPE 2 : Créer la session de checkout Stripe
-        console.log('🟦 [RegisterContainer] 💳 Création session checkout Stripe...')
+        console.log('🟦 [RegisterContainer] 💳 Création session checkout Stripe... ID:', executionId)
         const response = await fetch('/api/stripe/checkout', {
           method: 'POST',
           headers: {
@@ -496,58 +547,71 @@ export default function RegisterContainer({
         })
 
         const checkoutData = await response.json()
+        console.log('🟦 [RegisterContainer] Réponse Stripe ID:', executionId, 'Data:', checkoutData)
 
         if (!response.ok) {
+          console.error('🔴 [RegisterContainer] Erreur Stripe checkout ID:', executionId, 'Error:', checkoutData)
           throw new Error(checkoutData.error || 'Erreur lors de la création de la session de paiement')
         }
 
-        console.log('🟦 [RegisterContainer] ✅ Session checkout créée, nettoyage localStorage')
+        console.log('🟦 [RegisterContainer] ✅ Session checkout créée, nettoyage localStorage - ID:', executionId)
 
         // ÉTAPE 3 : Nettoyer localStorage maintenant que tout est OK
         clearSavedData()
 
-        // 🔧 CORRECTION : Marquer le composant comme "en cours de redirection" pour éviter les mises à jour
-        console.log('🟦 [RegisterContainer] 🔄 Redirection vers:', checkoutData.url)
+        console.log('🟦 [RegisterContainer] 🔄 Redirection vers:', checkoutData.url, '- ID:', executionId)
         
-        // Utiliser un flag pour éviter les mises à jour après redirection
-        const redirecting = true
-        
-        // ÉTAPE 4 : Rediriger vers la page de succès (simulation)
+        // ÉTAPE 4 : Rediriger vers Stripe Checkout ou page de succès
         if (checkoutData.url) {
-          // Pour éviter l'erreur de mise à jour de composant, utiliser window.location.href
           setTimeout(() => {
-            if (redirecting) {
-              window.location.href = checkoutData.url
-            }
+            console.log('🟦 [RegisterContainer] 🌐 Redirection effective - ID:', executionId)
+            window.location.href = checkoutData.url
           }, 100)
         }
       } else {
+        console.log('🔴 [RegisterContainer] ❌ Onboarding a échoué - ID:', executionId, 'Result:', result)
         throw new Error(result.error || "Erreur lors de la finalisation du profil")
       }
     } catch (error) {
-      console.error('🔴 [RegisterContainer] Erreur lors de la finalisation avec abonnement:', error)
+      console.error('🔴 [RegisterContainer] Erreur lors de la finalisation avec abonnement - ID:', executionId, 'Error:', error)
+      
+      // Gestion d'erreur détaillée
+      let errorMessage = "Une erreur inattendue s'est produite. Veuillez réessayer."
       
       if (error instanceof Error) {
+        console.log('🔴 [RegisterContainer] Message d\'erreur - ID:', executionId, 'Message:', error.message)
+        
         if (error.message.includes("validation") || error.message.includes("invalides")) {
-          toast.error("Veuillez vérifier que tous les champs obligatoires sont remplis correctement.")
+          errorMessage = "Veuillez vérifier que tous les champs obligatoires sont remplis correctement."
         } else if (error.message.includes("utilisateur")) {
-          toast.error("Problème avec votre compte. Veuillez recommencer l'inscription.")
+          errorMessage = "Problème avec votre compte. Veuillez recommencer l'inscription."
+        } else if (error.message.includes("stripe") || error.message.includes("paiement")) {
+          errorMessage = "Erreur lors du traitement du paiement. Votre profil a été créé mais l'abonnement n'a pas pu être activé."
+        } else if (error.message.includes("existe déjà") || error.message.includes("already exists")) {
+          console.log('🟨 [RegisterContainer] Profil existe déjà - redirection - ID:', executionId)
+          clearSavedData()
+          toast.success("Votre profil existe déjà ! Redirection vers votre tableau de bord.")
+          router.push("/tableau-de-bord?welcome=true")
+          return
         } else {
-          toast.error(error.message)
+          errorMessage = error.message
         }
-      } else {
-        toast.error("Une erreur inattendue s'est produite. Veuillez réessayer.")
       }
+      
+      console.log('🔴 [RegisterContainer] Toast erreur affiché - ID:', executionId, 'Message:', errorMessage)
+      toast.error(errorMessage)
     } finally {
-      // 🔧 CORRECTION : Ne pas mettre setIsLoading(false) si on redirige
-      // pour éviter l'erreur de mise à jour de composant
+      console.log('🟦 [RegisterContainer] Finally block - ID:', executionId, 'URL actuelle:', typeof window !== 'undefined' ? window.location.href : 'undefined')
       if (typeof window !== 'undefined' && !window.location.href.includes('/inscription-reussie')) {
+        console.log('🟦 [RegisterContainer] setIsLoading(false) - ID:', executionId)
         setIsLoading(false)
+      } else {
+        console.log('🟦 [RegisterContainer] Skip setIsLoading car redirection - ID:', executionId)
       }
     }
   }
 
-  // 🔧 NOUVEAU : Handler pour "skip" l'abonnement
+  // Handler pour "skip" l'abonnement
   const handleSkipSubscription = async () => {
     setIsLoading(true)
     
@@ -643,7 +707,7 @@ export default function RegisterContainer({
     clearSavedData()
   }
 
-  // 🔧 MODIFICATION : renderStep avec la nouvelle étape 7
+  // renderStep avec toutes les étapes
   const renderStep = () => {
     switch (currentStep) {
       case 1:
@@ -676,9 +740,8 @@ export default function RegisterContainer({
       case 6:
         return <PreferencesForm userType={selectedRole!} onSubmit={handlePreferencesSubmit} onBack={handleBack} initialData={formData.preferences} isLoading={isLoading} />
       case 7:
-        // 🔧 NOUVEAU : Étape abonnement avec plan pré-sélectionné
         return <SubscriptionStep 
-          selectedPlan={selectedPlan || 'premium'} // Fallback sur premium si pas de plan
+          selectedPlan={selectedPlan}
           onSubmit={handleSubscriptionSubmit} 
           onSkip={handleSkipSubscription}
           onBack={handleBack} 
@@ -693,7 +756,7 @@ export default function RegisterContainer({
     }
   }
 
-  // Page de sélection de rôle minimaliste (identique)
+  // Page de sélection de rôle minimaliste
   if (!selectedRole) {
     return (
       <div className="min-h-screen bg-white">
@@ -725,7 +788,6 @@ export default function RegisterContainer({
               </div>
             </div>
 
-            {/* Sélection de rôle large */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
               {/* Carte Client */}
               <button
@@ -768,7 +830,7 @@ export default function RegisterContainer({
               {/* Carte Professionnel */}
               <button
                 onClick={() => {
-                  // 🔧 NOUVEAU : Rediriger vers choix d'abonnement au lieu de setSelectedRole
+                  // Rediriger vers choix d'abonnement au lieu de setSelectedRole
                   router.push('/choix-abonnement')
                 }}
                 className="group relative p-12 rounded-2xl border border-gray-300 hover:border-gray-400 hover:shadow-lg transition-all duration-300 text-left bg-white"

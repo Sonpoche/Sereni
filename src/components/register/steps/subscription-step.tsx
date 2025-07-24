@@ -1,7 +1,7 @@
 // src/components/register/steps/subscription-step.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -79,40 +79,34 @@ export default function SubscriptionStep({
   const currentPlan = planDetails[selectedPlan]
   const isStandard = selectedPlan === 'standard'
 
-  const handlePayment = async () => {
+  const handlePayment = () => {
+    console.log('🟦 [SubscriptionStep] 🚀 Bouton cliqué !') // Debug
+    
     setPaymentStep('processing')
     setCountdown(3)
     
     // Toast de début
     toast.loading('Traitement du paiement...', { id: 'payment' })
     
-    // Flag pour éviter les mises à jour après unmount
-    let isMounted = true
-    
-    // Simuler le processus de paiement avec countdown
+    // Timer simple qui fonctionne
     const timer = setInterval(() => {
-      if (!isMounted) {
-        clearInterval(timer)
-        return
-      }
-      
       setCountdown(prev => {
+        console.log('🟦 [SubscriptionStep] Countdown:', prev - 1) // Debug
+        
         if (prev <= 1) {
           clearInterval(timer)
-          isMounted = false
-          // Soumettre avec le plan pré-sélectionné
-          onSubmit({ plan: selectedPlan })
+          console.log('🟦 [SubscriptionStep] ✅ Appel onSubmit') // Debug
+          
+          // Utiliser setTimeout pour éviter l'erreur React
+          setTimeout(() => {
+            onSubmit({ plan: selectedPlan })
+          }, 100) // Petit délai pour laisser le temps au state de se mettre à jour
+          
           return 0
         }
         return prev - 1
       })
     }, 1000)
-
-    // Nettoyer le timer si le composant est démonté
-    return () => {
-      isMounted = false
-      clearInterval(timer)
-    }
   }
 
   if (paymentStep === 'processing') {
