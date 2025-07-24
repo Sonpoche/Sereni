@@ -63,6 +63,19 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
       icon: Search,
       roles: [UserRole.CLIENT],
     },
+    // NOUVEAU : Factures selon le rôle
+    {
+      title: "Facturation",
+      href: "/factures",
+      icon: FileText,
+      roles: [UserRole.PROFESSIONAL],
+    },
+    {
+      title: "Mes factures",
+      href: "/mes-factures",
+      icon: FileText,
+      roles: [UserRole.CLIENT],
+    },
     {
       title: "Mon profil",
       href: "/profil",
@@ -121,7 +134,7 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
                 return null
               }
 
-              const isActive = pathname === item.href
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
 
               return (
                 <Link
@@ -158,7 +171,7 @@ export function DashboardSidebar({ isOpen, onClose, user }: SidebarProps) {
               }}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                pathname === "/parametres"
+                pathname === "/parametres" || pathname.startsWith("/parametres/")
                   ? "bg-primary/10 text-primary"
                   : "text-gray-600 hover:bg-gray-100"
               )}

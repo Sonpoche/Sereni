@@ -29,6 +29,8 @@ const protectedPaths = [
   "/clients", 
   "/services",
   "/mes-cours-collectifs",
+  "/factures", // Pour les professionnels
+  "/mes-factures", // NOUVEAU : Pour les clients
   "/parametres"
 ]
 
@@ -146,6 +148,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(
       new URL(`/connexion?callbackUrl=${encodedCallbackUrl}`, request.url)
     )
+  }
+
+  // 🔥 NOUVEAU : Vérifications spéciales pour les routes de facturation
+  if (session?.user) {
+    const user = session.user
+
+    // Seuls les professionnels peuvent accéder à /factures
+    if (pathname.startsWith('/factures')) {
+      if (user.role !== 'PROFESSIONAL') {
+        console.log(`🔄 [Middleware] Accès factures refusé (rôle: ${user.role})`)
+        return NextResponse.redirect(new URL('/tableau-de-bord', request.url))
+      }
+    }
+
+    // Seuls les clients peuvent accéder à /mes-factures
+    if (pathname.startsWith('/mes-factures')) {
+      if (user.role !== 'CLIENT') {
+        console.log(`🔄 [Middleware] Accès mes-factures refusé (rôle: ${user.role})`)
+        return NextResponse.redirect(new URL('/tableau-de-bord', request.url))
+      }
+    }
   }
 
   // LOGIQUE PRINCIPALE : Si connecté mais profil incomplet

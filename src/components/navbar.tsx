@@ -17,7 +17,8 @@ import {
   Clock,
   Search,
   MapPin,
-  BookOpen
+  BookOpen,
+  FileText // NOUVEAU : icône pour les factures
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
@@ -180,6 +181,11 @@ export function Navbar({ onMenuClick }: NavbarProps) {
                         <BookOpen className="h-4 w-4" />
                         <Link href="/mes-cours-collectifs" className="flex-1">Mes cours collectifs</Link>
                       </DropdownMenuItem>
+                      {/* NOUVEAU : Facturation pour les professionnels */}
+                      <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
+                        <FileText className="h-4 w-4" />
+                        <Link href="/factures" className="flex-1">Facturation</Link>
+                      </DropdownMenuItem>
                     </>
                   )}
 
@@ -197,6 +203,11 @@ export function Navbar({ onMenuClick }: NavbarProps) {
                       <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
                         <Search className="h-4 w-4" />
                         <Link href="/recherche" className="flex-1">Trouver un praticien</Link>
+                      </DropdownMenuItem>
+                      {/* NOUVEAU : Mes factures pour les clients */}
+                      <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-primary/5 hover:text-primary cursor-pointer">
+                        <FileText className="h-4 w-4" />
+                        <Link href="/mes-factures" className="flex-1">Mes factures</Link>
                       </DropdownMenuItem>
                     </>
                   )}
