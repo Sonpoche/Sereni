@@ -48,6 +48,14 @@ export default function DashboardLayout({
     return () => window.removeEventListener('resize', checkIfMobile)
   }, [pathname])
 
+  // ✨ AJOUT : Redirection des admins vers /admin
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.role === 'ADMIN') {
+      console.log('🔄 [Dashboard Layout] Admin détecté, redirection vers /admin')
+      router.replace('/admin')
+    }
+  }, [session, status, router])
+
   // État de chargement
   if (status === "loading") {
     return (
@@ -63,7 +71,19 @@ export default function DashboardLayout({
     return null
   }
 
-  // Si l'utilisateur est authentifié
+  // ✨ AJOUT : Si c'est un admin, afficher un loader pendant la redirection
+  if (session.user.role === 'ADMIN') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-red-600 mx-auto mb-4" />
+          <p className="text-gray-600">Redirection vers l'interface admin...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Si l'utilisateur est authentifié (et n'est pas admin)
   return (
     <div className="min-h-screen flex flex-col">
       {/* Navbar avec Z-index élevé pour passer au-dessus de la sidebar */}

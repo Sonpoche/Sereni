@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Table,
@@ -46,7 +47,8 @@ import {
   UserCheck,
   Building,
   CreditCard,
-  Download
+  Download,
+  User
 } from "lucide-react"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -550,7 +552,7 @@ export default function UtilisateursPage() {
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Êtes-vous sûr de vouloir supprimer l'utilisateur {user.name} ? 
+                                    Êtes-vous sûr de vouloir supprimer l&apos;utilisateur {user.name} ? 
                                     Cette action est irréversible.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
@@ -582,7 +584,7 @@ export default function UtilisateursPage() {
         <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Modifier l'utilisateur - {selectedUser.name}</DialogTitle>
+              <DialogTitle>Modifier l&apos;utilisateur - {selectedUser.name}</DialogTitle>
             </DialogHeader>
             <EditUserForm 
               user={selectedUser}
@@ -644,8 +646,9 @@ function CreateUserForm({ onSuccess }: CreateUserFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium mb-1">Nom complet</label>
+        <Label htmlFor="name">Nom complet</Label>
         <Input
+          id="name"
           value={formData.name}
           onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
           required
@@ -653,8 +656,9 @@ function CreateUserForm({ onSuccess }: CreateUserFormProps) {
       </div>
       
       <div>
-        <label className="block text-sm font-medium mb-1">Email</label>
+        <Label htmlFor="email">Email</Label>
         <Input
+          id="email"
           type="email"
           value={formData.email}
           onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
@@ -663,7 +667,7 @@ function CreateUserForm({ onSuccess }: CreateUserFormProps) {
       </div>
       
       <div>
-        <label className="block text-sm font-medium mb-1">Rôle</label>
+        <Label htmlFor="role">Rôle</Label>
         <Select value={formData.role} onValueChange={(value: any) => setFormData(prev => ({ ...prev, role: value }))}>
           <SelectTrigger>
             <SelectValue />
@@ -682,22 +686,16 @@ function CreateUserForm({ onSuccess }: CreateUserFormProps) {
           id="sendWelcomeEmail"
           checked={formData.sendWelcomeEmail}
           onChange={(e) => setFormData(prev => ({ ...prev, sendWelcomeEmail: e.target.checked }))}
+          className="rounded"
         />
-        <label htmlFor="sendWelcomeEmail" className="text-sm">
-          Envoyer un email de bienvenue
-        </label>
+        <Label htmlFor="sendWelcomeEmail">Envoyer un email de bienvenue</Label>
       </div>
 
-      <div className="flex gap-3 pt-4">
+      <DialogFooter>
         <Button type="submit" disabled={loading}>
-          {loading ? 'Mise à jour...' : 'Mettre à jour'}
+          {loading ? 'Création...' : 'Créer l\'utilisateur'}
         </Button>
-      </div>
-    </form>
-  )
-}Création...' : 'Créer l\'utilisateur'}
-        </Button>
-      </div>
+      </DialogFooter>
     </form>
   )
 }
@@ -751,8 +749,9 @@ function EditUserForm({ user, onSuccess, onRoleChange }: EditUserFormProps) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Nom complet</label>
+          <Label htmlFor="edit-name">Nom complet</Label>
           <Input
+            id="edit-name"
             value={formData.name}
             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
             required
@@ -760,8 +759,9 @@ function EditUserForm({ user, onSuccess, onRoleChange }: EditUserFormProps) {
         </div>
         
         <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
+          <Label htmlFor="edit-email">Email</Label>
           <Input
+            id="edit-email"
             type="email"
             value={formData.email}
             onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
@@ -771,7 +771,7 @@ function EditUserForm({ user, onSuccess, onRoleChange }: EditUserFormProps) {
       </div>
       
       <div>
-        <label className="block text-sm font-medium mb-1">Rôle</label>
+        <Label htmlFor="edit-role">Rôle</Label>
         <Select value={formData.role} onValueChange={(value: any) => setFormData(prev => ({ ...prev, role: value }))}>
           <SelectTrigger>
             <SelectValue />
@@ -791,10 +791,9 @@ function EditUserForm({ user, onSuccess, onRoleChange }: EditUserFormProps) {
             id="hasProfile"
             checked={formData.hasProfile}
             onChange={(e) => setFormData(prev => ({ ...prev, hasProfile: e.target.checked }))}
+            className="rounded"
           />
-          <label htmlFor="hasProfile" className="text-sm">
-            Profil complété
-          </label>
+          <Label htmlFor="hasProfile">Profil complété</Label>
         </div>
 
         <div className="flex items-center gap-2">
@@ -803,10 +802,9 @@ function EditUserForm({ user, onSuccess, onRoleChange }: EditUserFormProps) {
             id="emailVerified"
             checked={formData.emailVerified}
             onChange={(e) => setFormData(prev => ({ ...prev, emailVerified: e.target.checked }))}
+            className="rounded"
           />
-          <label htmlFor="emailVerified" className="text-sm">
-            Email vérifié
-          </label>
+          <Label htmlFor="emailVerified">Email vérifié</Label>
         </div>
       </div>
 
@@ -825,6 +823,11 @@ function EditUserForm({ user, onSuccess, onRoleChange }: EditUserFormProps) {
         </div>
       </div>
 
-      <div className="flex gap-3 pt-4">
+      <DialogFooter>
         <Button type="submit" disabled={loading}>
-          {loading ? '
+          {loading ? 'Mise à jour...' : 'Mettre à jour'}
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}

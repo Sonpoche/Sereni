@@ -5,6 +5,7 @@ import { UserRole } from "@prisma/client"
 import prisma from "@/lib/prisma/client"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
+import { sendWelcomeEmail } from "@/lib/emails/welcome"
 
 // Schema de validation pour création d'utilisateur
 const createUserSchema = z.object({
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Récupérer les utilisateurs avec relations
+    // Récupérer les utilisateurs avec relations selon votre schéma réel
     const [users, totalCount] = await Promise.all([
       prisma.user.findMany({
         where: whereCondition,
@@ -81,10 +82,14 @@ export async function GET(request: NextRequest) {
               id: true,
               type: true,
               city: true,
-              _count: {
+              services: {
                 select: {
-                  services: true,
-                  bookings: true
+                  id: true
+                }
+              },
+              bookings: {
+                select: {
+                  id: true
                 }
               }
             }
@@ -92,9 +97,9 @@ export async function GET(request: NextRequest) {
           clientProfile: {
             select: {
               id: true,
-              _count: {
+              bookings: {
                 select: {
-                  bookings: true
+                  id: true
                 }
               }
             }
@@ -129,12 +134,12 @@ export async function GET(request: NextRequest) {
         id: user.professionalProfile.id,
         type: user.professionalProfile.type,
         city: user.professionalProfile.city || 'Non renseigné',
-        servicesCount: user.professionalProfile._count.services,
-        bookingsCount: user.professionalProfile._count.bookings
+        servicesCount: user.professionalProfile.services.length,
+        bookingsCount: user.professionalProfile.bookings.length
       } : undefined,
       clientProfile: user.clientProfile ? {
         id: user.clientProfile.id,
-        bookingsCount: user.clientProfile._count.bookings
+        bookingsCount: user.clientProfile.bookings.length
       } : undefined
     }))
 
@@ -190,39 +195,55 @@ export async function POST(request: NextRequest) {
     const tempPassword = Math.random().toString(36).slice(-8)
     const hashedPassword = await bcrypt.hash(tempPassword, 12)
 
-    // Créer l'utilisateur
-    const newUser = await prisma.user.create({
-      data: {
-        name: validatedData.name,
-        email: validatedData.email,
-        password: hashedPassword,
-        role: validatedData.role as UserRole,
-        hasProfile: false, // L'utilisateur devra compléter son profil
-        emailVerified: null // L'utilisateur devra vérifier son email
+    // Créer l'utilisateur et son profil selon le rôle
+    const newUser = await prisma.$transaction(async (tx) => {
+      // Créer l'utilisateur
+      const user = await tx.user.create({
+        data: {
+          name: validatedData.name,
+          email: validatedData.email,
+          password: hashedPassword,
+          role: validatedData.role as UserRole,
+          hasProfile: false, // L'utilisateur devra compléter son profil
+          emailVerified: null // L'utilisateur devra vérifier son email
+        }
+      })
+
+      // Créer le profil selon le rôle
+      if (validatedData.role === 'PROFESSIONAL') {
+        await tx.professional.create({
+          data: {
+            userId: user.id,
+            type: 'OTHER', // Valeur par défaut, à compléter
+            languages: ['fr'],
+            subscriptionTier: 'standard'
+          }
+        })
+      } else if (validatedData.role === 'CLIENT') {
+        await tx.client.create({
+          data: {
+            userId: user.id,
+            preferredLanguage: 'fr'
+          }
+        })
       }
+
+      return user
     })
 
-    // Envoyer l'email de bienvenue (simulation)
+    // Envoyer l'email de bienvenue si demandé
     if (validatedData.sendWelcomeEmail) {
-      console.log(`
-📧 EMAIL DE BIENVENUE ENVOYÉ À ${validatedData.email}:
-
-Sujet: Bienvenue sur SereniBook - Votre compte a été créé
-
-Bonjour ${validatedData.name},
-
-Votre compte SereniBook a été créé par un administrateur.
-
-Informations de connexion :
-- Email : ${validatedData.email}
-- Mot de passe temporaire : ${tempPassword}
-
-⚠️ Veuillez vous connecter et changer votre mot de passe dès que possible.
-
-Lien de connexion : ${process.env.NEXTAUTH_URL}/connexion
-
-L'équipe SereniBook
-      `)
+      try {
+        await sendWelcomeEmail({
+          email: newUser.email!,
+          name: newUser.name!,
+          tempPassword,
+          loginUrl: `${process.env.NEXTAUTH_URL}/connexion`
+        })
+      } catch (emailError) {
+        console.error('❌ Erreur envoi email:', emailError)
+        // Ne pas faire échouer la création si l'email ne peut pas être envoyé
+      }
     }
 
     console.log(`✅ [Admin] Utilisateur créé: ${newUser.email} (${newUser.role})`)
@@ -235,7 +256,7 @@ L'équipe SereniBook
         name: newUser.name,
         email: newUser.email,
         role: newUser.role,
-        tempPassword: validatedData.sendWelcomeEmail ? tempPassword : undefined
+        tempPassword: validatedData.sendWelcomeEmail ? undefined : tempPassword
       }
     })
 

@@ -32,7 +32,7 @@ export async function GET(
 
     const userId = params.id
 
-    // Récupérer l'utilisateur avec toutes les relations
+    // Récupérer l'utilisateur avec toutes les relations selon votre schéma
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -77,7 +77,7 @@ export async function GET(
             invoices: {
               select: {
                 id: true,
-                invoiceNumber: true,
+                // Supprimer invoiceNumber car il n'existe pas dans votre schéma
                 amount: true,
                 status: true,
                 createdAt: true
@@ -111,7 +111,7 @@ export async function GET(
             invoices: {
               select: {
                 id: true,
-                invoiceNumber: true,
+                // Supprimer invoiceNumber car il n'existe pas dans votre schéma
                 amount: true,
                 status: true,
                 createdAt: true
@@ -131,7 +131,7 @@ export async function GET(
       )
     }
 
-    // Formater les données pour le frontend
+    // Formater les données pour le frontend selon les vraies relations
     const formattedUser = {
       id: user.id,
       name: user.name || 'Non renseigné',
@@ -155,14 +155,14 @@ export async function GET(
         id: user.professionalProfile.id,
         type: user.professionalProfile.type,
         city: user.professionalProfile.city,
-        address: user.profesionalProfile.address,
+        address: user.professionalProfile.address,
         bio: user.professionalProfile.bio,
         services: user.professionalProfile.services,
         recentBookings: user.professionalProfile.bookings,
         recentInvoices: user.professionalProfile.invoices,
         stats: {
           totalServices: user.professionalProfile.services.length,
-          activeServices: user.professionalProfile.services.filter(s => s.active).length,
+          activeServices: user.professionalProfile.services.filter((s: any) => s.active).length,
           totalBookings: user.professionalProfile.bookings.length,
           totalInvoices: user.professionalProfile.invoices.length
         }

@@ -16,8 +16,8 @@ import {
   Calendar,
   FileText,
   Euro,
-  UserPlus,
-  Activity
+  Activity,
+  Settings
 } from "lucide-react"
 import Link from "next/link"
 
@@ -264,7 +264,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Alertes et actions */}
+        {/* Actions requises */}
         <Card>
           <CardHeader>
             <CardTitle>Actions requises</CardTitle>
@@ -334,6 +334,54 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
+      {/* Actions rapides */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Actions rapides</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {/* Liens fonctionnels */}
+            <Button variant="outline" asChild>
+              <Link href="/admin/utilisateurs">
+                <Users className="h-4 w-4 mr-2" />
+                Gérer les utilisateurs
+              </Link>
+            </Button>
+            
+            <Button variant="outline" asChild>
+              <Link href="/admin/demandes-annulation">
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Demandes d'annulation
+              </Link>
+            </Button>
+
+            <Button variant="outline" asChild>
+              <Link href="/admin/dashboard/stats">
+                <TrendingUp className="h-4 w-4 mr-2" />
+                API Statistiques
+              </Link>
+            </Button>
+            
+            {/* Liens à développer */}
+            <Button variant="outline" disabled>
+              <CreditCard className="h-4 w-4 mr-2" />
+              Abonnements (à venir)
+            </Button>
+            
+            <Button variant="outline" disabled>
+              <Calendar className="h-4 w-4 mr-2" />
+              Rendez-vous (à venir)
+            </Button>
+            
+            <Button variant="outline" disabled>
+              <Settings className="h-4 w-4 mr-2" />
+              Configuration (à venir)
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Métriques business */}
       <Card>
         <CardHeader>
@@ -361,44 +409,6 @@ export default function AdminDashboard() {
               </div>
               <p className="text-sm text-gray-600">Adoption Premium</p>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions rapides */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Actions rapides</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Button variant="outline" asChild>
-              <Link href="/admin/utilisateurs">
-                <Users className="h-4 w-4 mr-2" />
-                Gérer les utilisateurs
-              </Link>
-            </Button>
-            
-            <Button variant="outline" asChild>
-              <Link href="/admin/abonnements">
-                <CreditCard className="h-4 w-4 mr-2" />
-                Abonnements
-              </Link>
-            </Button>
-            
-            <Button variant="outline" asChild>
-              <Link href="/admin/statistiques">
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Rapports détaillés
-              </Link>
-            </Button>
-            
-            <Button variant="outline" asChild>
-              <Link href="/admin/configuration">
-                <Activity className="h-4 w-4 mr-2" />
-                Configuration
-              </Link>
-            </Button>
           </div>
         </CardContent>
       </Card>

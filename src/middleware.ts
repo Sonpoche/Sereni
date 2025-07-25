@@ -40,6 +40,18 @@ const allowedIncompleteProfilePaths = [
   "/inscription-reussie"
 ]
 
+// NOUVELLE FONCTION : Détermine la redirection selon le rôle
+function getPostLoginRedirect(userRole: string): string {
+  switch (userRole) {
+    case 'ADMIN':
+      return '/admin'
+    case 'PROFESSIONAL':
+    case 'CLIENT':
+    default:
+      return '/tableau-de-bord'
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   
@@ -111,7 +123,7 @@ export async function middleware(request: NextRequest) {
   const session = await auth()
 
   if (session) {
-    console.log(`🔄 [Middleware] Utilisateur: ${session.user.email}, hasProfile: ${session.user.hasProfile}`)
+    console.log(`🔄 [Middleware] Utilisateur: ${session.user.email}, hasProfile: ${session.user.hasProfile}, role: ${session.user.role}`)
   }
 
   // Protection pour /onboarding
@@ -130,10 +142,11 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next()
     }
 
-    // Utilisateur connecté : si profil complet, rediriger vers tableau de bord
+    // MODIFICATION : Utilisateur connecté avec profil complet -> redirection selon le rôle
     if (session.user.hasProfile) {
-      console.log(`🔄 [Middleware] Redirection vers tableau-de-bord - profil complet`)
-      return NextResponse.redirect(new URL("/tableau-de-bord", request.url))
+      const redirectTo = getPostLoginRedirect(session.user.role)
+      console.log(`🔄 [Middleware] Redirection vers ${redirectTo} - profil complet`)
+      return NextResponse.redirect(new URL(redirectTo, request.url))
     }
 
     console.log(`🔄 [Middleware] Accès autorisé à onboarding (complétion de profil)`)
@@ -168,9 +181,10 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/inscription-reussie" + request.nextUrl.search, request.url))
     }
     
-    // Sinon rediriger vers tableau de bord
-    console.log(`🔄 [Middleware] Redirection vers tableau-de-bord - déjà connecté`)
-    return NextResponse.redirect(new URL("/tableau-de-bord", request.url))
+    // MODIFICATION : Redirection selon le rôle au lieu de toujours /tableau-de-bord
+    const redirectTo = getPostLoginRedirect(session.user.role)
+    console.log(`🔄 [Middleware] Redirection vers ${redirectTo} - déjà connecté (rôle: ${session.user.role})`)
+    return NextResponse.redirect(new URL(redirectTo, request.url))
   }
 
   // Si l'utilisateur est sur une page protégée et n'est pas connecté
@@ -191,11 +205,18 @@ export async function middleware(request: NextRequest) {
   if (session?.user) {
     const user = session.user
 
+    // AJOUT : Redirection pour les admins qui vont sur /tableau-de-bord
+    if (pathname === '/tableau-de-bord' && user.role === 'ADMIN') {
+      console.log(`🔄 [Middleware] Admin redirigé de /tableau-de-bord vers /admin`)
+      return NextResponse.redirect(new URL('/admin', request.url))
+    }
+
     // Seuls les professionnels peuvent accéder à /factures
     if (pathname.startsWith('/factures')) {
       if (user.role !== 'PROFESSIONAL') {
         console.log(`🔄 [Middleware] Accès factures refusé (rôle: ${user.role})`)
-        return NextResponse.redirect(new URL('/tableau-de-bord', request.url))
+        const redirectTo = getPostLoginRedirect(user.role)
+        return NextResponse.redirect(new URL(redirectTo, request.url))
       }
     }
 
@@ -203,7 +224,8 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith('/mes-factures')) {
       if (user.role !== 'CLIENT') {
         console.log(`🔄 [Middleware] Accès mes-factures refusé (rôle: ${user.role})`)
-        return NextResponse.redirect(new URL('/tableau-de-bord', request.url))
+        const redirectTo = getPostLoginRedirect(user.role)
+        return NextResponse.redirect(new URL(redirectTo, request.url))
       }
     }
   }
