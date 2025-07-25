@@ -1,5 +1,4 @@
 // src/middleware.ts
-
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { auth } from "@/lib/auth/auth.config"
@@ -30,13 +29,13 @@ const protectedPaths = [
   "/services",
   "/mes-cours-collectifs",
   "/factures", // Pour les professionnels
-  "/mes-factures", // NOUVEAU : Pour les clients
+  "/mes-factures", // Pour les clients
   "/parametres"
 ]
 
 // Pages qui ne nécessitent pas un profil complet (en plus des publicPaths)
 const allowedIncompleteProfilePaths = [
-  "/onboarding",  // ✅ CHANGEMENT : onboarding au lieu de profil/completer
+  "/onboarding",  // Onboarding au lieu de profil/completer
   "/api/",
   "/inscription-reussie"
 ]
@@ -46,10 +45,48 @@ export async function middleware(request: NextRequest) {
   
   console.log(`🔄 [Middleware] Chemin: ${pathname}`)
 
-  // ✅ NOUVEAU : Rediriger /profil/completer vers /onboarding
+  // Rediriger /profil/completer vers /onboarding
   if (pathname.startsWith('/profil/completer')) {
     console.log(`🔄 [Middleware] Redirection /profil/completer -> /onboarding`)
     return NextResponse.redirect(new URL('/onboarding', request.url))
+  }
+
+  // PROTECTION SPÉCIALE POUR LES ROUTES ADMIN
+  if (pathname.startsWith('/admin')) {
+    console.log(`🔒 [Middleware] Route admin détectée: ${pathname}`)
+    
+    const session = await auth()
+    
+    if (!session?.user?.id) {
+      console.log(`🔒 [Middleware] Non connecté -> /connexion`)
+      return NextResponse.redirect(new URL('/connexion?callbackUrl=' + encodeURIComponent(pathname), request.url))
+    }
+    
+    if (session.user.role !== 'ADMIN') {
+      console.log(`🔒 [Middleware] Pas admin (${session.user.role}) -> /`)
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+    
+    console.log(`✅ [Middleware] Accès admin autorisé pour: ${session.user.email}`)
+    return NextResponse.next()
+  }
+
+  // PROTECTION API ADMIN
+  if (pathname.startsWith('/api/admin')) {
+    console.log(`🔒 [Middleware] API admin détectée: ${pathname}`)
+    
+    const session = await auth()
+    
+    if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log(`🔒 [Middleware] API admin - accès refusé`)
+      return NextResponse.json(
+        { error: "Accès non autorisé - Admin requis" },
+        { status: 401 }
+      )
+    }
+    
+    console.log(`✅ [Middleware] API admin autorisée`)
+    return NextResponse.next()
   }
 
   // Vérifier si le chemin actuel est public - FIX: comparaison exacte pour "/"
@@ -77,7 +114,7 @@ export async function middleware(request: NextRequest) {
     console.log(`🔄 [Middleware] Utilisateur: ${session.user.email}, hasProfile: ${session.user.hasProfile}`)
   }
 
-  // ✅ MODIFICATION : Protection pour /onboarding au lieu de /profil/completer
+  // Protection pour /onboarding
   if (pathname === "/onboarding") {
     if (!session) {
       // Utilisateur non connecté : vérifier qu'il y a les bons paramètres
@@ -150,7 +187,7 @@ export async function middleware(request: NextRequest) {
     )
   }
 
-  // 🔥 NOUVEAU : Vérifications spéciales pour les routes de facturation
+  // Vérifications spéciales pour les routes de facturation
   if (session?.user) {
     const user = session.user
 
