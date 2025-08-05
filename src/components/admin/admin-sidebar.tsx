@@ -1,4 +1,5 @@
 // src/components/admin/admin-sidebar.tsx
+
 "use client"
 
 import { usePathname } from "next/navigation"
@@ -20,7 +21,8 @@ import {
   TrendingUp,
   Bell,
   Shield,
-  Banknote
+  MapPin,
+  Wrench
 } from "lucide-react"
 
 interface MenuItem {
@@ -29,183 +31,302 @@ interface MenuItem {
   icon: any
   badge?: number | string
   description?: string
-  priority?: 'high' | 'medium' | 'low'
+  status?: 'completed' | 'in-progress' | 'pending'
+  section?: 'main' | 'tools'
 }
 
 export function AdminSidebar() {
   const pathname = usePathname()
   const [pendingRequests, setPendingRequests] = useState(0)
-  const [failedPayments, setFailedPayments] = useState(0)
+  const [professionalAlerts, setProfessionalAlerts] = useState(0)
 
-  // Récupérer les notifications/badges
+  // Récupérer les notifications et alertes
   useEffect(() => {
-    const fetchNotifications = async () => {
+    const fetchAlerts = async () => {
       try {
-        const [requestsResponse, paymentsResponse] = await Promise.all([
-          fetch('/api/admin/cancelation-requests?filter=pending'),
-          fetch('/api/admin/subscriptions/stats')
-        ])
-
-        if (requestsResponse.ok) {
-          const requestsData = await requestsResponse.json()
-          setPendingRequests(requestsData.pending || 0)
+        // Demandes d'annulation en attente
+        const cancelationResponse = await fetch('/api/admin/cancelation-requests?filter=pending')
+        if (cancelationResponse.ok) {
+          const cancelationData = await cancelationResponse.json()
+          setPendingRequests(cancelationData.pending || 0)
         }
 
-        if (paymentsResponse.ok) {
-          const paymentsData = await paymentsResponse.json()
-          setFailedPayments(paymentsData.stats?.failedPayments || 0)
+        // Alertes pour les professionnels
+        const professionalResponse = await fetch('/api/admin/professionals/stats')
+        if (professionalResponse.ok) {
+          const professionalData = await professionalResponse.json()
+          const totalAlerts = (professionalData.alerts?.incompleteProfiles || 0) + 
+                            (professionalData.alerts?.inactiveProfessionals || 0)
+          setProfessionalAlerts(totalAlerts)
         }
       } catch (error) {
-        console.error('Erreur lors de la récupération des notifications:', error)
+        console.error('Erreur lors de la récupération des alertes:', error)
       }
     }
 
-    fetchNotifications()
+    fetchAlerts()
     
-    // Actualiser toutes les 30 secondes
-    const interval = setInterval(fetchNotifications, 30000)
+    // Actualiser toutes les 5 minutes
+    const interval = setInterval(fetchAlerts, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [])
 
   const menuItems: MenuItem[] = [
+    // Section principale
     {
       title: "Dashboard",
       href: "/admin",
       icon: LayoutDashboard,
       description: "Vue d'ensemble de la plateforme",
-      priority: 'high'
+      status: 'completed',
+      section: 'main'
     },
     {
       title: "Utilisateurs",
       href: "/admin/utilisateurs",
       icon: Users,
       description: "Gestion des utilisateurs (CRUD complet)",
-      priority: 'high'
+      status: 'completed',
+      section: 'main'
+    },
+    {
+      title: "Professionnels",
+      href: "/admin/professionnels",
+      icon: Building,
+      badge: professionalAlerts > 0 ? professionalAlerts : undefined,
+      description: "🎯 NOUVELLE PAGE - Supervision métier",
+      status: 'completed',
+      section: 'main'
     },
     {
       title: "Abonnements",
       href: "/admin/abonnements",
       icon: CreditCard,
-      badge: failedPayments > 0 ? failedPayments : undefined,
-      description: "Gestion Stripe complète - Paiements échoués, changements de plan",
-      priority: 'high'
+      description: "✅ COMPLET - Gestion Stripe & MRR",
+      status: 'completed',
+      section: 'main'
     },
     {
       title: "Demandes d'annulation",
       href: "/admin/demandes-annulation",
       icon: XCircle,
       badge: pendingRequests > 0 ? pendingRequests : undefined,
-      description: "Traitement des demandes d'annulation Stripe",
-      priority: 'high'
+      description: "Traitement des demandes d'annulation",
+      status: 'completed',
+      section: 'main'
     },
-    // Séparateur visuel pour les priorités moyennes
-    {
-      title: "Professionnels",
-      href: "/admin/professionnels",
-      icon: UserCheck,
-      description: "Supervision métier - Validation profils, suspensions",
-      priority: 'medium'
-    },
+    
+    // Pages à développer (Priorité 2 & 3)
     {
       title: "Rapports",
       href: "/admin/rapports",
-      icon: BarChart3,
-      description: "Dashboard analytique - MRR, churn, LTV",
-      priority: 'medium'
+      icon: TrendingUp,
+      description: "📊 Priorité 2 - Analytics & Dashboard",
+      status: 'pending',
+      section: 'main'
     },
     {
       title: "Rendez-vous",
-      href: "/admin/rendez-vous",
+      href: "/admin/rendez-vous", 
       icon: Calendar,
-      description: "Supervision opérationnelle - Vue d'ensemble RDV",
-      priority: 'medium'
+      description: "📊 Priorité 2 - Supervision opérationnelle",
+      status: 'pending',
+      section: 'main'
     },
-    // Priorités basses - Configuration
     {
       title: "Factures",
       href: "/admin/factures",
       icon: FileText,
-      description: "Gestion financière - Vue globale factures",
-      priority: 'low'
+      description: "⚙️ Priorité 3 - Gestion financière",
+      status: 'pending',
+      section: 'main'
     },
     {
       title: "Configuration",
       href: "/admin/configuration",
       icon: Settings,
-      description: "Paramètres plateforme - Tarifs, templates",
-      priority: 'low'
+      description: "⚙️ Priorité 3 - Paramètres plateforme",
+      status: 'pending',
+      section: 'main'
+    },
+
+    // Section outils de maintenance
+    {
+      title: "Coordonnées GPS",
+      href: "/admin/coordonnees",
+      icon: MapPin,
+      description: "🔧 Outil - Diagnostic géolocalisation",
+      status: 'completed',
+      section: 'tools'
     }
   ]
 
-  // Grouper les éléments par priorité pour un meilleur affichage
-  const highPriorityItems = menuItems.filter(item => item.priority === 'high')
-  const mediumPriorityItems = menuItems.filter(item => item.priority === 'medium')
-  const lowPriorityItems = menuItems.filter(item => item.priority === 'low')
+  // Séparer les éléments par section
+  const mainItems = menuItems.filter(item => item.section === 'main')
+  const toolItems = menuItems.filter(item => item.section === 'tools')
 
-  const MenuGroup = ({ title, items }: { title: string, items: MenuItem[] }) => (
-    <div className="space-y-1">
-      <div className="px-3 py-2">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          {title}
-        </h3>
-      </div>
-      {items.map((item) => {
-        const Icon = item.icon
-        const isActive = pathname === item.href
+  const renderMenuItem = (item: MenuItem) => {
+    const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+    const isCompleted = item.status === 'completed'
+    const isPending = item.status === 'pending'
+
+    return (
+      <div key={item.href} className="group">
+        <Link
+          href={item.href}
+          className={cn(
+            "flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative",
+            isActive && isCompleted
+              ? "bg-red-50 text-red-700 border border-red-200 shadow-sm"
+              : isActive && isPending
+              ? "bg-orange-50 text-orange-700 border border-orange-200"
+              : isCompleted
+              ? "text-gray-700 hover:bg-gray-50 hover:text-red-600"
+              : "text-gray-500 hover:bg-orange-50 hover:text-orange-600"
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <item.icon className={cn(
+                "h-5 w-5 flex-shrink-0 transition-colors",
+                isActive && isCompleted ? "text-red-600" :
+                isActive && isPending ? "text-orange-600" :
+                isCompleted ? "text-gray-500" : "text-gray-400"
+              )} />
+              
+              {/* Indicateur de statut */}
+              {isCompleted && (
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></div>
+              )}
+              {isPending && (
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+              )}
+            </div>
+            <span className={cn(
+              isCompleted ? "text-gray-900" : "text-gray-500"
+            )}>
+              {item.title}
+            </span>
+          </div>
+          
+          {/* Badge pour les notifications */}
+          {item.badge && (
+            <span className={cn(
+              "px-2 py-1 text-xs rounded-full font-medium min-w-[20px] text-center",
+              isActive 
+                ? "bg-red-100 text-red-700"
+                : "bg-yellow-100 text-yellow-700 animate-pulse"
+            )}>
+              {item.badge}
+            </span>
+          )}
+        </Link>
         
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-              isActive
-                ? "bg-primary text-primary-foreground"
-                : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-            )}
-          >
-            <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
-            <span className="flex-1">{item.title}</span>
-            
-            {item.badge && (
-              <span className={cn(
-                "ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                isActive
-                  ? "bg-primary-foreground text-primary"
-                  : "bg-red-100 text-red-800"
-              )}>
-                {item.badge}
-              </span>
-            )}
-          </Link>
-        )
-      })}
-    </div>
-  )
+        {/* Description au hover */}
+        {item.description && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-8 mt-1">
+            <p className={cn(
+              "text-xs italic",
+              item.description.includes('🎯') ? "text-green-600 font-medium" :
+              item.description.includes('✅') ? "text-blue-600" :
+              item.description.includes('📊') ? "text-orange-600" :
+              item.description.includes('⚙️') ? "text-gray-500" :
+              item.description.includes('🔧') ? "text-purple-600" :
+              "text-gray-500"
+            )}>
+              {item.description}
+            </p>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col w-64 bg-white border-r border-gray-200 pt-5 pb-4 overflow-y-auto">
-      <div className="flex items-center flex-shrink-0 px-4 mb-6">
-        <Shield className="h-8 w-8 text-primary" />
-        <span className="ml-2 text-xl font-bold text-gray-900">Admin</span>
+    <aside className="fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-64 bg-white border-r shadow-sm">
+      {/* En-tête */}
+      <div className="p-4 border-b bg-gradient-to-r from-red-50 to-orange-50">
+        <div className="flex items-center gap-2">
+          <Shield className="h-5 w-5 text-red-600" />
+          <span className="font-medium text-red-800">Interface Admin</span>
+        </div>
+        <p className="text-xs text-red-600 mt-1">
+          Système de gestion SereniBook
+        </p>
       </div>
-      
-      <nav className="mt-5 flex-1 px-2 space-y-6">
-        <MenuGroup title="Business Critical" items={highPriorityItems} />
-        <MenuGroup title="Analytics & Monitoring" items={mediumPriorityItems} />
-        <MenuGroup title="Configuration" items={lowPriorityItems} />
-      </nav>
 
-      {/* Statut système en bas */}
-      <div className="flex-shrink-0 px-4 py-4 border-t border-gray-200">
-        <div className="flex items-center">
-          <div className="h-2 w-2 bg-green-400 rounded-full mr-2"></div>
-          <span className="text-xs text-gray-500">Système opérationnel</span>
+      {/* Navigation */}
+      <div className="p-4 overflow-y-auto h-full">
+        {/* Section principale */}
+        <nav className="space-y-1">
+          {mainItems.map(renderMenuItem)}
+        </nav>
+
+        {/* Séparateur pour les outils */}
+        <div className="my-6 border-t border-gray-200"></div>
+
+        {/* Section outils de maintenance */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider flex items-center gap-2">
+            <Wrench className="h-3 w-3" />
+            Outils de Maintenance
+          </h3>
+          
+          <nav className="space-y-1">
+            {toolItems.map(renderMenuItem)}
+          </nav>
         </div>
-        <div className="mt-1 text-xs text-gray-400">
-          {new Date().toLocaleDateString('fr-FR')}
+
+        {/* Séparateur */}
+        <div className="my-6 border-t border-gray-200"></div>
+
+        {/* Section status du projet */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            État du Projet
+          </h3>
+          
+          <div className="text-xs text-gray-600 space-y-2">
+            <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="font-medium text-green-800">Terminé</span>
+              </div>
+              <span className="text-green-700 font-semibold">6 pages</span>
+            </div>
+            
+            <div className="flex items-center justify-between p-2 bg-orange-50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+                <span className="font-medium text-orange-800">À développer</span>
+              </div>
+              <span className="text-orange-700 font-semibold">4 pages</span>
+            </div>
+          </div>
+
+          {/* Prochaine priorité */}
+          <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="h-3 w-3 text-green-600" />
+              <span className="text-xs font-semibold text-green-800">
+                Statut Actuel
+              </span>
+            </div>
+            <p className="text-xs text-green-700">
+              Page /admin/professionnels <br/>
+              <span className="font-semibold text-green-800">✅ TERMINÉE</span>
+            </p>
+          </div>
+
+          {/* Contact rapide */}
+          <div className="pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Bell className="h-3 w-3" />
+              <span>Alertes actives: {(pendingRequests + professionalAlerts)}</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </aside>
   )
 }
