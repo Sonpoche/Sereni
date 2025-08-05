@@ -19,7 +19,8 @@ import {
   Calendar,
   TrendingUp,
   Bell,
-  Shield
+  Shield,
+  Banknote
 } from "lucide-react"
 
 interface MenuItem {
@@ -28,27 +29,42 @@ interface MenuItem {
   icon: any
   badge?: number | string
   description?: string
+  priority?: 'high' | 'medium' | 'low'
 }
 
 export function AdminSidebar() {
   const pathname = usePathname()
   const [pendingRequests, setPendingRequests] = useState(0)
+  const [failedPayments, setFailedPayments] = useState(0)
 
-  // Récupérer le nombre de demandes en attente
+  // Récupérer les notifications/badges
   useEffect(() => {
-    const fetchPendingRequests = async () => {
+    const fetchNotifications = async () => {
       try {
-        const response = await fetch('/api/admin/cancelation-requests?filter=pending')
-        if (response.ok) {
-          const data = await response.json()
-          setPendingRequests(data.pending || 0)
+        const [requestsResponse, paymentsResponse] = await Promise.all([
+          fetch('/api/admin/cancelation-requests?filter=pending'),
+          fetch('/api/admin/subscriptions/stats')
+        ])
+
+        if (requestsResponse.ok) {
+          const requestsData = await requestsResponse.json()
+          setPendingRequests(requestsData.pending || 0)
+        }
+
+        if (paymentsResponse.ok) {
+          const paymentsData = await paymentsResponse.json()
+          setFailedPayments(paymentsData.stats?.failedPayments || 0)
         }
       } catch (error) {
-        console.error('Erreur lors de la récupération des demandes:', error)
+        console.error('Erreur lors de la récupération des notifications:', error)
       }
     }
 
-    fetchPendingRequests()
+    fetchNotifications()
+    
+    // Actualiser toutes les 30 secondes
+    const interval = setInterval(fetchNotifications, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   const menuItems: MenuItem[] = [
@@ -56,140 +72,140 @@ export function AdminSidebar() {
       title: "Dashboard",
       href: "/admin",
       icon: LayoutDashboard,
-      description: "Vue d'ensemble de la plateforme"
+      description: "Vue d'ensemble de la plateforme",
+      priority: 'high'
     },
     {
       title: "Utilisateurs",
       href: "/admin/utilisateurs",
       icon: Users,
-      description: "Gestion des utilisateurs (CRUD complet)"
+      description: "Gestion des utilisateurs (CRUD complet)",
+      priority: 'high'
+    },
+    {
+      title: "Abonnements",
+      href: "/admin/abonnements",
+      icon: CreditCard,
+      badge: failedPayments > 0 ? failedPayments : undefined,
+      description: "Gestion Stripe complète - Paiements échoués, changements de plan",
+      priority: 'high'
     },
     {
       title: "Demandes d'annulation",
       href: "/admin/demandes-annulation",
       icon: XCircle,
       badge: pendingRequests > 0 ? pendingRequests : undefined,
-      description: "Traitement des demandes d'annulation"
+      description: "Traitement des demandes d'annulation Stripe",
+      priority: 'high'
     },
-    // Liens fonctionnels disponibles
+    // Séparateur visuel pour les priorités moyennes
     {
-      title: "Statistiques",
-      href: "/admin/dashboard/stats",
+      title: "Professionnels",
+      href: "/admin/professionnels",
+      icon: UserCheck,
+      description: "Supervision métier - Validation profils, suspensions",
+      priority: 'medium'
+    },
+    {
+      title: "Rapports",
+      href: "/admin/rapports",
       icon: BarChart3,
-      description: "API de statistiques détaillées"
-    },
-    
-    // Liens à développer (pages à créer)
-    {
-      title: "Abonnements",
-      href: "/admin/abonnements",
-      icon: CreditCard,
-      description: "Gestion des abonnements Stripe"
+      description: "Dashboard analytique - MRR, churn, LTV",
+      priority: 'medium'
     },
     {
       title: "Rendez-vous",
-      href: "/admin/rendez-vous", 
+      href: "/admin/rendez-vous",
       icon: Calendar,
-      description: "Supervision des rendez-vous"
+      description: "Supervision opérationnelle - Vue d'ensemble RDV",
+      priority: 'medium'
     },
+    // Priorités basses - Configuration
     {
       title: "Factures",
       href: "/admin/factures",
       icon: FileText,
-      description: "Gestion des factures"
-    },
-    {
-      title: "Professionnels",
-      href: "/admin/professionnels",
-      icon: Building,
-      description: "Gestion spécifique des professionnels"
-    },
-    {
-      title: "Rapports avancés",
-      href: "/admin/rapports",
-      icon: TrendingUp,
-      description: "Rapports et analytics"
+      description: "Gestion financière - Vue globale factures",
+      priority: 'low'
     },
     {
       title: "Configuration",
       href: "/admin/configuration",
       icon: Settings,
-      description: "Paramètres de la plateforme"
-    },
+      description: "Paramètres plateforme - Tarifs, templates",
+      priority: 'low'
+    }
   ]
 
+  // Grouper les éléments par priorité pour un meilleur affichage
+  const highPriorityItems = menuItems.filter(item => item.priority === 'high')
+  const mediumPriorityItems = menuItems.filter(item => item.priority === 'medium')
+  const lowPriorityItems = menuItems.filter(item => item.priority === 'low')
+
+  const MenuGroup = ({ title, items }: { title: string, items: MenuItem[] }) => (
+    <div className="space-y-1">
+      <div className="px-3 py-2">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {title}
+        </h3>
+      </div>
+      {items.map((item) => {
+        const Icon = item.icon
+        const isActive = pathname === item.href
+        
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+              isActive
+                ? "bg-primary text-primary-foreground"
+                : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+            )}
+          >
+            <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
+            <span className="flex-1">{item.title}</span>
+            
+            {item.badge && (
+              <span className={cn(
+                "ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                isActive
+                  ? "bg-primary-foreground text-primary"
+                  : "bg-red-100 text-red-800"
+              )}>
+                {item.badge}
+              </span>
+            )}
+          </Link>
+        )
+      })}
+    </div>
+  )
+
   return (
-    <aside className="fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-64 bg-white border-r shadow-sm">
-      {/* En-tête */}
-      <div className="p-4 border-b bg-red-50">
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-red-600" />
-          <span className="font-medium text-red-800">Interface Admin</span>
+    <div className="flex flex-col w-64 bg-white border-r border-gray-200 pt-5 pb-4 overflow-y-auto">
+      <div className="flex items-center flex-shrink-0 px-4 mb-6">
+        <Shield className="h-8 w-8 text-primary" />
+        <span className="ml-2 text-xl font-bold text-gray-900">Admin</span>
+      </div>
+      
+      <nav className="mt-5 flex-1 px-2 space-y-6">
+        <MenuGroup title="Business Critical" items={highPriorityItems} />
+        <MenuGroup title="Analytics & Monitoring" items={mediumPriorityItems} />
+        <MenuGroup title="Configuration" items={lowPriorityItems} />
+      </nav>
+
+      {/* Statut système en bas */}
+      <div className="flex-shrink-0 px-4 py-4 border-t border-gray-200">
+        <div className="flex items-center">
+          <div className="h-2 w-2 bg-green-400 rounded-full mr-2"></div>
+          <span className="text-xs text-gray-500">Système opérationnel</span>
+        </div>
+        <div className="mt-1 text-xs text-gray-400">
+          {new Date().toLocaleDateString('fr-FR')}
         </div>
       </div>
-
-      {/* Navigation */}
-      <div className="p-4 overflow-y-auto h-full">
-        <nav className="space-y-1">
-          {menuItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
-
-            return (
-              <div key={item.href} className="group">
-                <Link
-                  href={item.href}
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                    isActive
-                      ? "bg-red-50 text-red-700 border border-red-200 shadow-sm"
-                      : "text-gray-700 hover:bg-gray-50 hover:text-red-600"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <item.icon className={cn(
-                      "h-5 w-5 flex-shrink-0 transition-colors",
-                      isActive ? "text-red-600" : "text-gray-500"
-                    )} />
-                    <span>{item.title}</span>
-                  </div>
-                  
-                  {item.badge && (
-                    <span className={cn(
-                      "px-2 py-1 text-xs rounded-full font-medium",
-                      isActive 
-                        ? "bg-red-100 text-red-700"
-                        : "bg-yellow-100 text-yellow-700 animate-pulse"
-                    )}>
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-                
-                {/* Description au hover */}
-                {item.description && (
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-8 mt-1">
-                    <p className="text-xs text-gray-500 italic">{item.description}</p>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </nav>
-
-        {/* Section status en bas */}
-        <div className="mt-8 pt-4 border-t">
-          <div className="text-xs text-gray-500 space-y-1">
-            <div className="flex items-center justify-between">
-              <span>✅ Fonctionnel</span>
-              <span className="text-green-600">3 pages</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>🚧 À développer</span>
-              <span className="text-orange-600">6 pages</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </aside>
+    </div>
   )
 }

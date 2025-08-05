@@ -105,6 +105,11 @@ model User {
   // NOUVELLES RELATIONS : Abonnements
   subscription        Subscription?
   cancelationRequests CancelationRequest[]
+
+  adminLogs          AdminLog[]
+
+  @@map("users")
+
 }
 
 model Account {
@@ -617,6 +622,41 @@ model RecurrenceRule {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 }
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String   // 'SUBSCRIPTION_PLAN_CHANGED', 'SUBSCRIPTION_CANCELED', etc.
+  details   Json     // Détails flexibles de l'action
+  createdAt DateTime @default(now())
+
+  // Relations
+  admin     User     @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum AdminAction {
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  USER_SUSPENDED
+  USER_REACTIVATED
+  SUBSCRIPTION_PLAN_CHANGED
+  SUBSCRIPTION_CANCELED_IMMEDIATELY
+  SUBSCRIPTION_CANCELED_AT_PERIOD_END
+  SUBSCRIPTION_REACTIVATED
+  PAYMENT_RETRY_INITIATED
+  CANCELATION_REQUEST_APPROVED
+  CANCELATION_REQUEST_DENIED
+  PROFESSIONAL_VALIDATED
+  PROFESSIONAL_SUSPENDED
+}
+
+
+
 
 // ==========================================
 // ANCIEN SYSTÈME À SUPPRIMER PLUS TARD
