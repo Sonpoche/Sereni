@@ -53,7 +53,7 @@ interface Professional {
   createdAt: string
   lastLoginAt?: string
   professional: {
-    type: string // Type DB (sera converti vers ProfessionalType pour l'affichage)
+    type: string
     businessName?: string
     phone?: string
     city?: string
@@ -68,9 +68,9 @@ interface Professional {
   }
   metrics: {
     totalClients: number
-    totalBookings: number // Changé de totalAppointments à totalBookings
+    totalBookings: number
     monthlyRevenue: number
-    monthlyBookings: number // Changé de monthlyAppointments à monthlyBookings
+    monthlyBookings: number
     conversionRate: number
     isProfileComplete: boolean
   }
@@ -133,9 +133,8 @@ export default function ProfessionalsAdminPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
 
-  // Fonction utilitaire type-safe pour obtenir le libellé du type professionnel
+  // Fonction utilitaire pour obtenir le libellé du type professionnel
   const getProfessionalTypeLabel = (dbType: string): string => {
-    // Approche défensive pour éviter les erreurs TypeScript
     const typeMap: Record<string, string> = {
       'LIFE_COACH': 'Coach de vie',
       'PERSONAL_COACH': 'Coach sportif', 
@@ -162,11 +161,11 @@ export default function ProfessionalsAdminPage() {
     { key: 'OTHER', label: 'Autre' }
   ]
 
-  // Chargement des statistiques
+  // Chargement des statistiques - CORRIGÉ
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('/api/admin/professionals/stats')
+        const response = await fetch('/api/admin/professionnels/stats')
         if (response.ok) {
           const data = await response.json()
           setStats(data)
@@ -180,7 +179,7 @@ export default function ProfessionalsAdminPage() {
     fetchStats()
   }, [])
 
-  // Chargement des professionnels avec filtres
+  // Chargement des professionnels avec filtres - CORRIGÉ
   useEffect(() => {
     const fetchProfessionals = async () => {
       setIsLoading(true)
@@ -196,7 +195,7 @@ export default function ProfessionalsAdminPage() {
           ...(selectedSubscription !== 'all' && { subscriptionTier: selectedSubscription })
         })
 
-        const response = await fetch(`/api/admin/professionals?${params}`)
+        const response = await fetch(`/api/admin/professionnels?${params}`)
         if (response.ok) {
           const data = await response.json()
           setProfessionals(data.professionals)
@@ -215,10 +214,10 @@ export default function ProfessionalsAdminPage() {
     fetchProfessionals()
   }, [currentPage, sortBy, sortOrder, searchTerm, selectedType, selectedStatus, selectedSubscription])
 
-  // Actions administratives
+  // Actions administratives - CORRIGÉ
   const handleAdminAction = async (professionalId: string, action: string, reason?: string) => {
     try {
-      const response = await fetch(`/api/admin/professionals/${professionalId}`, {
+      const response = await fetch(`/api/admin/professionnels/${professionalId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, reason })
@@ -240,7 +239,7 @@ export default function ProfessionalsAdminPage() {
     }
   }
 
-  // Filtrage et tri des professionnels côté client (pour la recherche instantanée)
+  // Filtrage et tri des professionnels côté client
   const filteredProfessionals = useMemo(() => {
     return professionals.filter(professional => {
       const matchesSearch = !searchTerm || 

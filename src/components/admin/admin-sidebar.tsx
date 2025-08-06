@@ -51,8 +51,8 @@ export function AdminSidebar() {
           setPendingRequests(cancelationData.pending || 0)
         }
 
-        // Alertes pour les professionnels
-        const professionalResponse = await fetch('/api/admin/professionals/stats')
+        // Alertes pour les professionnels - CORRECTION ICI
+        const professionalResponse = await fetch('/api/admin/professionnels/stats') // ✅ CORRIGÉ
         if (professionalResponse.ok) {
           const professionalData = await professionalResponse.json()
           const totalAlerts = (professionalData.alerts?.incompleteProfiles || 0) + 
