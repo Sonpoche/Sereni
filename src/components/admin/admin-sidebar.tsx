@@ -1,4 +1,4 @@
-// src/components/admin/admin-sidebar.tsx
+// Fichier: src/components/admin/admin-sidebar.tsx (mise à jour)
 
 "use client"
 
@@ -51,8 +51,8 @@ export function AdminSidebar() {
           setPendingRequests(cancelationData.pending || 0)
         }
 
-        // Alertes pour les professionnels - CORRECTION ICI
-        const professionalResponse = await fetch('/api/admin/professionnels/stats') // ✅ CORRIGÉ
+        // Alertes pour les professionnels
+        const professionalResponse = await fetch('/api/admin/professionnels/stats')
         if (professionalResponse.ok) {
           const professionalData = await professionalResponse.json()
           const totalAlerts = (professionalData.alerts?.incompleteProfiles || 0) + 
@@ -116,20 +116,22 @@ export function AdminSidebar() {
       section: 'main'
     },
     
-    // Pages à développer (Priorité 2 & 3)
+    // ✅ MISE À JOUR: Page Rapports maintenant terminée
     {
       title: "Rapports",
       href: "/admin/rapports",
-      icon: TrendingUp,
-      description: "📊 Priorité 2 - Analytics & Dashboard",
-      status: 'pending',
+      icon: BarChart3, // Changé de TrendingUp à BarChart3 pour plus de cohérence
+      description: "✅ COMPLET - Analytics & métriques avancées",
+      status: 'completed', // ✅ Changé de 'pending' à 'completed'
       section: 'main'
     },
+    
+    // Pages à développer (Priorité suivante)
     {
       title: "Rendez-vous",
       href: "/admin/rendez-vous", 
       icon: Calendar,
-      description: "📊 Priorité 2 - Supervision opérationnelle",
+      description: "📊 Priorité 1 - Supervision opérationnelle",
       status: 'pending',
       section: 'main'
     },
@@ -137,7 +139,7 @@ export function AdminSidebar() {
       title: "Factures",
       href: "/admin/factures",
       icon: FileText,
-      description: "⚙️ Priorité 3 - Gestion financière",
+      description: "⚙️ Priorité 2 - Gestion financière",
       status: 'pending',
       section: 'main'
     },
@@ -228,7 +230,7 @@ export function AdminSidebar() {
             <p className={cn(
               "text-xs italic",
               item.description.includes('🎯') ? "text-green-600 font-medium" :
-              item.description.includes('✅') ? "text-blue-600" :
+              item.description.includes('✅') ? "text-blue-600 font-medium" : // ✅ Ajout font-medium
               item.description.includes('📊') ? "text-orange-600" :
               item.description.includes('⚙️') ? "text-gray-500" :
               item.description.includes('🔧') ? "text-purple-600" :
@@ -287,34 +289,50 @@ export function AdminSidebar() {
           </h3>
           
           <div className="text-xs text-gray-600 space-y-2">
+            {/* ✅ MISE À JOUR: 7 pages terminées maintenant */}
             <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span className="font-medium text-green-800">Terminé</span>
               </div>
-              <span className="text-green-700 font-semibold">6 pages</span>
+              <span className="text-green-700 font-semibold">7 pages</span> {/* ✅ Changé de 6 à 7 */}
             </div>
             
+            {/* ✅ MISE À JOUR: 3 pages à développer maintenant */}
             <div className="flex items-center justify-between p-2 bg-orange-50 rounded-lg">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
                 <span className="font-medium text-orange-800">À développer</span>
               </div>
-              <span className="text-orange-700 font-semibold">4 pages</span>
+              <span className="text-orange-700 font-semibold">3 pages</span> {/* ✅ Changé de 4 à 3 */}
             </div>
           </div>
 
-          {/* Prochaine priorité */}
+          {/* ✅ MISE À JOUR: Prochaine priorité */}
           <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
             <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="h-3 w-3 text-green-600" />
+              <BarChart3 className="h-3 w-3 text-green-600" />
               <span className="text-xs font-semibold text-green-800">
-                Statut Actuel
+                Dernière Réalisation
               </span>
             </div>
             <p className="text-xs text-green-700">
-              Page /admin/professionnels <br/>
+              Page /admin/rapports <br/>
               <span className="font-semibold text-green-800">✅ TERMINÉE</span>
+            </p>
+          </div>
+
+          {/* ✅ NOUVEAU: Prochaine étape */}
+          <div className="p-3 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg border border-orange-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Calendar className="h-3 w-3 text-orange-600" />
+              <span className="text-xs font-semibold text-orange-800">
+                Prochaine Étape
+              </span>
+            </div>
+            <p className="text-xs text-orange-700">
+              Page /admin/rendez-vous <br/>
+              <span className="font-semibold text-orange-800">🚧 EN COURS</span>
             </p>
           </div>
 
